@@ -1,63 +1,94 @@
-# Common Payroll System — Template
+# Payroll — Reusable Template
 
-> **Status: Phase 2 baseline.** This is the working payroll application copied from the original
-> project as the starting point for the reusable, client-customizable template. Company identity
-> removal, the relational database (Option A), Manager/HR/Accountant roles, Company Information,
-> audit logs and the Resigned Staff workflow follow in later phases. Each client gets its own
-> Supabase project and Vercel deployment — configure them with `.env` / Vercel environment
-> variables (see `.env.example`); nothing client-specific is stored in this repository.
->
-> Branches: `source` (generic baseline) → `test` (integration / regression) → `main` (approved
-> releases). Client work goes on `client/<client-name>` branches created from `source`.
+A payroll / HR application (employees, attendance, time entry, payroll, increments, salary
+advance, statutory PF/ESI/bonus reports, salary slips, user rights) that can be deployed
+separately for each client. It contains **no company identity, company data or credentials**:
+every client gets its own Supabase project and Vercel deployment, configured only through
+environment variables.
 
-# VIPL Payroll ERP
+> **Status: Phase 2 (identity removed, regression tests added).** Storage is still the single
+> `erp_data` JSON row. The relational database with per-role security (Manager / HR /
+> Accountant), Company Information, audit logs and the Resigned Staff workflow come in later
+> phases.
 
-Payroll / HR ERP for Visalam Industries Pvt Ltd (employees, attendance, time entry, payroll,
-increments, salary advance, statutory reports, user rights). Data is stored in Supabase.
-
-The app was first built as one HTML file (kept unchanged in `original/VIPL-PAYROLL-ERP.html`
-for reference). It is now split into HTML, CSS, React components and JS modules, and behaves
-exactly the same.
-
-## Run
+## Run locally
 
 ```bash
-npm install
-npm run dev       # development server at http://localhost:5173
-npm run build     # production build in dist/ — upload that folder to any static host
-npm run preview   # serve the built dist/ locally
+npm ci
+cp .env.example .env    # then fill in your own development project's values
+npm run dev             # http://localhost:5173
+npm run build           # production build in dist/
+npm run preview         # serve dist/ locally
+npm test                # regression tests (see Testing)
 ```
 
 `npm run dev` does not run the `api/` server function, so adding/editing users only works on
-Vercel (or locally with `npx vercel dev`). Signing in and everything else works with `npm run dev`.
+Vercel (or locally with `npx vercel dev`).
 
-## Security setup (Supabase + Vercel)
+## Configuration (environment variables)
 
-Logins are Supabase Auth accounts (passwords are hashed by Supabase and never stored in the ERP
-data). The database rules only let signed-in staff accounts read or write data.
+All values are per client. `.env.example` lists them with placeholders only — never commit a
+real `.env`.
 
-1. **Supabase → SQL Editor:** run `supabase/setup.sql` (creates the table and the rules).
-2. **Supabase → Authentication → Sign In / Providers:** turn **off** "Allow new users to sign up".
-3. **First Software Admin:** Authentication → Users → Add user → Create new user with email
-   `swadmin@users.vipl-payroll.app`, a strong password and **Auto Confirm User** ticked. Then run
-   the `update auth.users ...` statement at the end of `supabase/setup.sql`.
-4. **Vercel → Settings → Environment Variables** (Production and Preview):
-   - `SUPABASE_URL` = your project URL
-   - `SUPABASE_SERVICE_ROLE_KEY` = the **secret / service_role** key (Supabase → Project
-     Settings → API Keys). Never put this key in the browser code or share it.
-5. Redeploy. Sign in as `swadmin` and create everyone else from **User Management**.
+| Variable | Where | Purpose |
+|---|---|---|
+| `VITE_SUPABASE_URL` | browser | The client's Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | browser | The project's **Publishable** key (safe in the browser) |
+| `VITE_APP_NAME` | browser | Name shown in the title, backups and the import template (default `Payroll`) |
+| `VITE_LOGIN_EMAIL_DOMAIN` | browser | Usernames map to `<username>@<domain>` in Supabase Auth (default `users.example.com`) |
+| `SUPABASE_URL` | server | Same project URL, used by `api/users.js` |
+| `SUPABASE_SERVICE_ROLE_KEY` | server | The **secret** key — server only, never in browser code |
+| `LOGIN_EMAIL_DOMAIN` | server | Must equal `VITE_LOGIN_EMAIL_DOMAIN` |
 
-   **Or use the default accounts:** instead of step 3, run `supabase/default-users.sql`. It creates
-   (or resets) swadmin / SoftAdmin@123, admin / admin123, hr.manager / hr@1234,
-   accounts / acc@1234 and viewer / view@1234 — publicly known passwords, so change them after
-   the first login.
+The company name, address, logo and unit names are entered inside the app
+(**Software Admin → Company Details**), not in code.
 
-Usernames map to `<username>@users.vipl-payroll.app` in Supabase Auth (no email is ever sent).
-Each account's role is stored in its Auth `app_metadata`, which only `api/users.js` can change.
+## New client deployment (current storage)
 
-Limits to know: the whole ERP database is still one JSON row, so any signed-in staff account
-can technically read and change all of it (the per-module permissions are enforced by the app's
-screens, not by the database). Splitting the data into separate tables is needed to go further.
+1. Create a Supabase project for the client. **SQL Editor:** run `supabase/setup.sql`.
+2. **Authentication → Sign In / Providers:** turn **off** "Allow new users to sign up".
+3. **Authentication → Users → Add user:** `<username>@<LOGIN_EMAIL_DOMAIN>`, a strong password,
+   **Auto Confirm User** ticked; then run the commented `update auth.users …` statement at the
+   end of `supabase/setup.sql` with that email to make it the first Software Admin.
+4. Create a Vercel project from the client's branch and set the variables above (Production and
+   Preview). Redeploy, sign in, and create everyone else from **User Management**.
+
+There are no built-in accounts or default passwords.
+
+## Branches and releases
+
+| Branch | Use |
+|---|---|
+| `source` | Generic template development |
+| `test` | Integration and regression testing (`source` → `test` pull request) |
+| `main` | Approved releases only (`test` → `main` after review) |
+| `client/<client-name>` | One per client, created from a released `main`; only client configuration/branding |
+
+Tag each approved release on `main` (`v1.0.0`, `v1.1.0`, …). To roll a client back, redeploy
+the previous tag in Vercel (or reset the client branch to it); database changes from later
+phases will ship with their own forward/rollback scripts.
+
+## Testing
+
+```bash
+npm test                      # everything below
+npm run test:scan             # identity / secret scan of the repository and dist/
+node tests/golden-master.test.mjs [baseline-ref]
+```
+
+The browser tests use Playwright (Chromium) against a **simulated Supabase** in the test process
+(`tests/lib/mock-supabase.mjs`) and synthetic data (`tests/lib/fixtures.mjs`) — they never contact
+a real project. Set `PLAYWRIGHT_CHROMIUM=/path/to/chrome` to use a specific browser binary.
+
+| Test | Checks |
+|---|---|
+| `tests/scan-identity.mjs` | No original company identity, old default logins, keys or real project URLs; `.env.example` has placeholders only |
+| `tests/golden-master.test.mjs` | Builds the baseline commit (`15dce7c`, the app as copied from the original project) and this checkout, runs both on the same synthetic company and compares payroll figures for two months, all 13 pages, all 16 report screens, every slip/report printout, the Excel template and an import |
+| `tests/security.test.mjs` | Sign-in, roles, password stripping, user management API, deactivation, password change, logout |
+| `tests/bulk-import.test.mjs` | Excel template = form fields, upload review, import, records match manual entry |
+| `tests/units.test.mjs` | Unit numbering everywhere: list, form, attendance, slips, reports, Software Admin, Excel |
+
+Results and the files each test produced are written to `tests/output/` (git-ignored).
 
 ## Project structure
 
@@ -65,7 +96,6 @@ screens, not by the database). Splitting the data into separate tables is needed
 index.html                     Entry page: React root + ordered <script> tags for the modules
 api/users.js                   Vercel server function: creates/updates/deletes login accounts
 supabase/setup.sql             Database table + security rules (RLS) + first-admin statement
-supabase/default-users.sql     Creates / resets the five default login accounts
 src/
   main.jsx                     Renders the React shell, loads the CSS
   App.jsx                      Login screen + app shell + modal
@@ -78,7 +108,7 @@ src/
   config/
     navigation.js              Sidebar menu items (edit here to add/rename a menu)
     themes.js                  Colour theme list
-    brand.js                   App name and logo path
+    brand.js                   App name (VITE_APP_NAME), logo path, login email domain
   legacyBridge.js              Lets React call the module functions safely
   features/employee-import/    Employee Bulk Import (Excel)
     BulkImportDialog.jsx       Download template / upload / review / import dialog
@@ -89,9 +119,9 @@ src/
     shell.css                  Styles of the React shell components
     legacy/01..08-*.css        Original stylesheet, split by module
 public/
-  assets/vipl-logo.png         Logo (also the favicon)
+  assets/logo.svg              Neutral placeholder logo (also the favicon) — replace per client
   legacy/01..30-*.js           ERP business logic, one file per module
-original/VIPL-PAYROLL-ERP.html Original single-file version (reference only)
+tests/                         Regression tests (see Testing)
 ```
 
 ### JS modules (`public/legacy/`)
@@ -157,7 +187,7 @@ refused on upload (the columns no longer match) — download a new one.
 ## Working units
 
 Units are one list, `db.units` (`public/legacy/06b-units.js`), always shown with their number:
-`Unit-1 - SUN GROUP`, `Unit-2`, `Unit-3 - JOY SHREE ENTERPRISES`, `Unit-4 - S M S CONT`, `Unit-5`,
-`Unit-6` (a unit without a name shows just its number until one is added). The employee form, attendance filter, pay-slip buttons, acquittance register,
-payroll report and the import template all follow it. Names/addresses are edited, and new units
-added, in **Software Admin → Company Details**.
+`Unit-1 - NAME`, or just `Unit-2` while a unit has no name. A new installation starts with
+Unit-1 … Unit-6 unnamed. The employee form, attendance filter, pay-slip buttons, acquittance
+register, payroll report and the import template all follow it. Names/addresses are edited, and
+new units added, in **Software Admin → Company Details**.

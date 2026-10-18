@@ -2,6 +2,7 @@
 // the employee field list (buildColumns(ctx.fields)), so the template always matches the Add
 // Employee form. ExcelJS is large, so it is loaded only when one of these functions is used.
 import { optionsOf, rowsFromGrid } from './employeeColumns.js';
+import { APP_NAME } from '../../config/brand.js';
 
 const SHEET_NAME = 'Employees';
 const DATA_ROWS = 1000; // rows (2..1001) that get dropdowns / formats
@@ -20,7 +21,7 @@ const columnLetter = (n) => {
 export async function buildTemplate(columns, ctx = {}) {
   const ExcelJS = await loadExcelJS();
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'VIPL Payroll';
+  wb.creator = APP_NAME;
   const ws = wb.addWorksheet(SHEET_NAME, { views: [{ state: 'frozen', ySplit: 1 }] });
   // Hidden sheet holding the dropdown lists (department names can be long or many).
   const lists = wb.addWorksheet('Lists', { state: 'hidden' });
@@ -118,7 +119,7 @@ export async function buildTemplate(columns, ctx = {}) {
 
   const help = wb.addWorksheet('Instructions');
   help.columns = [{ width: 30 }, { width: 90 }];
-  help.addRow(['VIPL Payroll — Employee Bulk Import']).font = { bold: true, size: 14 };
+  help.addRow([`${APP_NAME} — Employee Bulk Import`]).font = { bold: true, size: 14 };
   help.addRow([]);
   [
     ['How to use', 'Fill one employee per row on the "Employees" sheet, starting from row 2. Do not change the header row (it is locked).'],

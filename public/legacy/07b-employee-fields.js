@@ -55,7 +55,7 @@ function employeeFields(){
     {key:'designation', label:'Designation', section:'basic', input:'text', width:18},
     {key:'empType', label:'Employment Type', section:'basic', input:'select', options:opts(['Full-Time','Part-Time','Contract']), width:15},
     {key:'unit', label:'Working Unit', section:'basic', input:'select',
-      // Import also accepts just the unit name ("SUN GROUP") or number ("Unit-1").
+      // Import also accepts just the unit name or number ("Unit-1").
       options:()=>getUnits().map(u=>({value:u.code, label:unitDisplayName(u), aliases:u.name?[u.name]:[]})),
       formValue:e=>unitCodeOf(e.unit), width:16},
     // ---- Bank & Statutory Details ----

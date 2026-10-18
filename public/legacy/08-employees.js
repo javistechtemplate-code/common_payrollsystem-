@@ -104,7 +104,7 @@ function nextEmpCode(){
 }
 /* ---- "+ Add Employee" choice: Add Manually (the form below) or Bulk Import (Excel) ----
    The Bulk Import dialog is a React component (src/features/employee-import/BulkImportDialog.jsx);
-   it is opened with the 'vipl:open-bulk-import' event and uses the two functions below. */
+   it is opened with the 'payroll:open-bulk-import' event and uses the two functions below. */
 function openAddEmployeeChooser(){
   if(!hasPerm('employees','add')){ alert('You do not have permission to do this.'); return; }
   document.getElementById('modalContent').innerHTML = `
@@ -125,7 +125,7 @@ function openAddEmployeeChooser(){
 }
 function openBulkImport(){
   closeModal();
-  window.dispatchEvent(new CustomEvent('vipl:open-bulk-import'));
+  window.dispatchEvent(new CustomEvent('payroll:open-bulk-import'));
 }
 // What the Bulk Import dialog needs to build the template and check uploaded rows.
 function employeeImportContext(){

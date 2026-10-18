@@ -3,7 +3,9 @@ import { callLegacy } from '../../legacyBridge.js';
 import { buildColumns, rowsFromGrid, validateRows } from './employeeColumns.js';
 import { buildTemplate, readEmployeeRows } from './excel.js';
 
-const TEMPLATE_FILE_NAME = 'VIPL-Employee-Import-Template.xlsx';
+import { APP_NAME } from '../../config/brand.js';
+
+const TEMPLATE_FILE_NAME = `${APP_NAME.replace(/[^A-Za-z0-9]+/g, '-')}-Employee-Import-Template.xlsx`;
 
 const showDate = (iso) => (iso ? iso.split('-').reverse().join('-') : '');
 // What the person typed (so a row with a wrong department shows that value, not the default).
@@ -13,7 +15,7 @@ const blank = (v) => v === undefined || v === null || String(v).trim() === '';
 // "Bulk Import" dialog for NEW employees only: download the Excel template (same columns as the
 // Add Employee form), upload a filled copy, review every row, then add the ready rows.
 // Existing employees are never changed from here — only through the Edit form.
-// Opened through the 'vipl:open-bulk-import' event (openBulkImport() in 08-employees.js).
+// Opened through the 'payroll:open-bulk-import' event (openBulkImport() in 08-employees.js).
 export default function BulkImportDialog() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState('start'); // 'start' | 'review' | 'done'
@@ -31,8 +33,8 @@ export default function BulkImportDialog() {
       setResults([]); setShowErrorsOnly(false); setImported(null);
       setOpen(true);
     };
-    window.addEventListener('vipl:open-bulk-import', onOpen);
-    return () => window.removeEventListener('vipl:open-bulk-import', onOpen);
+    window.addEventListener('payroll:open-bulk-import', onOpen);
+    return () => window.removeEventListener('payroll:open-bulk-import', onOpen);
   }, []);
 
   useEffect(() => {

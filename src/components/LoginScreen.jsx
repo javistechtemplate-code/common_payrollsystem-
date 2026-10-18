@@ -9,7 +9,7 @@ export default function LoginScreen() {
     <div id="loginScreen">
       <div className="loginBox">
         <div className="logoBadge">
-          <img src={LOGO_SRC} alt="VIPL Logo" id="loginLogo" />
+          <img src={LOGO_SRC} alt="Logo" id="loginLogo" />
         </div>
         <h1 className="loginTitle">{APP_NAME}</h1>
 

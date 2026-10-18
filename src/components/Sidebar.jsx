@@ -8,7 +8,7 @@ export default function Sidebar() {
     <div className="sidebar">
       <div className="sidebarBrand">
         <div className="logoBadge small">
-          <img src={LOGO_SRC} alt="VIPL Logo" />
+          <img src={LOGO_SRC} alt="Logo" />
         </div>
         <h2>{APP_NAME}</h2>
       </div>
