@@ -1,0 +1,5 @@
+/* Styles for the React shell components (previously inline style="" attributes in the
+   single-file HTML). Id-scoped so they keep the same priority over the legacy rules. */
+#loginScreen .loginTitle{text-align:center;}
+#loginScreen .loginTagline{text-align:center;}
+#currentUserBadge{font-size:13px;color:var(--muted);margin-right:4px;}
