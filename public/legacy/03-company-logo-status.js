@@ -34,7 +34,7 @@ function removeCompanyLogo(){
    any data can be read (RLS), so the last-seen name/logo is also kept in this browser's
    localStorage and applied at startup; with nothing cached a plain "Payroll" title and no logo
    are shown (never another company's name/logo). */
-const BRANDING_CACHE_KEY='payroll_company_branding'; // storage key only — never shown
+const BRANDING_CACHE_KEY='vipl_company_branding'; // storage key only — never shown
 const DEFAULT_BRAND_NAME='Payroll';
 function applyCompanyBranding(){
   const sideImg=document.querySelector('.sidebarBrand img');
@@ -132,7 +132,7 @@ function dominantLogoColor(img){
   for(let n=0;n<30 && (1.05/(lum(r,g,b)+0.05))<4.5;n++){ r*=0.93; g*=0.93; b*=0.93; }
   return '#'+[r,g,b].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
 }
-// File-name prefix from the company name ("ACME GROUP & CO" → "ACME-GROUP-CO"),
+// File-name prefix from the company name ("MF GROUP & CONTRACTORS" → "MF-GROUP-CONTRACTORS"),
 // used for downloaded backups and the Excel template.
 function companyFilePrefix(){
   return String(db.companyName||'').trim().replace(/[^A-Za-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || DEFAULT_BRAND_NAME;
