@@ -10,6 +10,7 @@ const PERMISSION_MODULES=[
   {key:'payroll',label:'Payroll'},
   {key:'increment',label:'Annual Increment'},
   {key:'salaryadvance',label:'Salary Advance'},
+  {key:'contractorbill',label:'Contractors Bill'},
   {key:'reports',label:'Reports'},
   {key:'settings',label:'Admin'}
 ];
@@ -94,7 +95,7 @@ function userAdminRedirectPage(){ return (currentUser && currentUser.role==='Sof
 // Convenience: does the user have ANY access at all to a module (used to show/hide nav + gate render()).
 function canOpenModule(moduleKey){ return hasPerm(moduleKey==='payrollprocess'?'payroll':moduleKey,'view'); }
 function denyMsg(action,moduleLabel){
-  return `<div class="panel"><h3>🚫 Access Denied</h3><p style="color:var(--muted);">You do not have permission to ${action} in the <b>${moduleLabel}</b> module. Please contact your Administrator if you believe this is a mistake.</p></div>`;
+  return `<div class="panel"><h3>${ico('shield-x')} Access Denied</h3><p style="color:var(--muted);">You do not have permission to ${action} in the <b>${moduleLabel}</b> module. Please contact your Administrator if you believe this is a mistake.</p></div>`;
 }
 
 function getSettings(){
@@ -104,6 +105,8 @@ function getSettings(){
   if(db.settings.pfEmployerRate===undefined) db.settings.pfEmployerRate=0.12;
   if(db.settings.canteenLunchRate===undefined) db.settings.canteenLunchRate=18;
   if(db.settings.canteenDinnerRate===undefined) db.settings.canteenDinnerRate=13.5;
+  if(db.settings.canteenTokenPrice===undefined) db.settings.canteenTokenPrice=150; // ₹ per canteen token
+  if(db.settings.lateGraceMinutes===undefined) db.settings.lateGraceMinutes=120; // free Late minutes per month
   return db.settings;
 }
 

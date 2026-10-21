@@ -2,12 +2,12 @@
    The company's working units are one list, db.units = [{code, name, address}], used by the
    employee form, attendance filter, pay slips, acquittance register and reports. Codes
    ('Unit-1', 'Unit-2', …) are what employee records store (employee.unit); names and addresses
-   are edited in the company settings. Older data had only unit1Name/unit2Name —
+   are edited in Software Admin → Company Details. Older data had only unit1Name/unit2Name —
    initDB() builds db.units from those (see ensureUnits()).
 */
-// Default working units for a new company. Every unit is always shown WITH its number —
-// e.g. "Unit-1 - NAME" — or just "Unit-2" while it has no name (names, addresses and more units
-// are added in the company settings).
+// The company's units: plain numbered units (Unit-1, Unit-2, …), shown with the company's short
+// name in front ("MF Unit-1" — unitDisplayName).
+// Contractors are a separate list (06c-contractors.js).
 const DEFAULT_UNITS = [
   {code:'Unit-1', name:'', address:''},
   {code:'Unit-2', name:'', address:''},
@@ -16,17 +16,33 @@ const DEFAULT_UNITS = [
   {code:'Unit-5', name:'', address:''},
   {code:'Unit-6', name:'', address:''}
 ];
-// Makes sure db.units exists and contains every default unit (adds missing ones once; never
-// renames or removes a unit). Keeps the older unit1/unit2 fields in step.
+const UNITS_VERSION = 4;
+// Names given by earlier versions of this list — placeholders ("Unit-2") and the contractor names
+// that used to be stored as unit names (now in db.contractors). They are cleared once; a name
+// typed by hand in Software Admin is never changed.
+const UNIT_OLD_DEFAULT_NAMES = ['UNIT1','UNIT2','UNIT3','UNIT4','UNIT5','UNIT6',
+  'SUNGROUP','JOYSHREE','JOYSHREEENTERPRISES','SMSCONT','SMSCONTRACTORS','MANOENTERPRISES'];
+// Makes sure db.units exists and contains every default unit (adds missing ones once, except
+// units the Software Admin deleted — db.removedUnits; never removes a unit itself, and only
+// clears the earlier default names once — see UNIT_OLD_DEFAULT_NAMES).
+// Keeps the old unit1/unit2 fields in step.
 function ensureUnits(){
   if(!Array.isArray(db.units)) db.units=[];
   const legacy={'Unit-1':{name:db.unit1Name, address:db.unit1Address}, 'Unit-2':{name:db.unit2Name, address:db.unit2Address}};
+  if(!Array.isArray(db.removedUnits)) db.removedUnits=[];
   DEFAULT_UNITS.forEach(d=>{
     if(db.units.some(u=>u && u.code===d.code)) return;
+    if(db.removedUnits.includes(d.code)) return; // deleted in Software Admin — never re-add
     const old=legacy[d.code]||{};
     db.units.push({code:d.code, name:old.name||d.name, address:old.address||d.address});
   });
   db.units=db.units.filter(u=>u && u.code);
+  if(!(db.unitsVersion>=UNITS_VERSION)){
+    db.units.forEach(u=>{
+      if(UNIT_OLD_DEFAULT_NAMES.includes(String(u.name||'').toUpperCase().replace(/[^A-Z0-9]/g,''))) u.name='';
+    });
+    db.unitsVersion=UNITS_VERSION;
+  }
   db.units.sort((a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));
   syncLegacyUnitFields();
 }
@@ -38,18 +54,28 @@ function syncLegacyUnitFields(){
 function getUnits(){
   return (Array.isArray(db.units) && db.units.length) ? db.units : DEFAULT_UNITS;
 }
-// The unit code an employee (or a stored code) belongs to — unknown/blank falls back to Unit-1,
-// as it always has.
+// The unit code an employee (or a stored code) belongs to — unknown/blank falls back to Unit-1
+// (or the first unit, if Unit-1 was deleted), as it always has.
 function unitCodeOf(unit){
   const code = unit && typeof unit==='object' ? unit.unit : unit;
-  return getUnits().some(u=>u.code===code) ? code : 'Unit-1';
+  const units=getUnits();
+  if(units.some(u=>u.code===code)) return code;
+  return units.some(u=>u.code==='Unit-1') ? 'Unit-1' : units[0].code;
 }
-// "Unit-1 - NAME", or just "Unit-2" while the unit has no name. Used everywhere a unit is
-// shown: form and template dropdowns, employee list, slips, registers and reports.
+// How many employees (any status — active, inactive or resigned) belong to a unit.
+function unitEmployeeCount(code){
+  return (db.employees||[]).filter(e=>unitCodeOf(e.unit)===code).length;
+}
+// A unit is shown with the company's short name in front: "MF Unit-1" (the first word of the
+// Company Name set in Software Admin). Used everywhere a unit is shown: form and template
+// dropdowns, employee list, attendance / time entry tabs, slips, registers, reports and Excel.
+function unitPrefix(){ return String(db.companyName||'').trim().split(/\s+/)[0] || ''; }
 function unitDisplayName(u){
-  const name=String((u && u.name) || '').trim();
-  return name && name!==u.code ? `${u.code} - ${name}` : u.code;
+  const p=unitPrefix();
+  return p ? `${p} ${u.code}` : u.code;
 }
+// Short label for the unit tabs: "MF UNIT 1".
+function unitTabLabel(u){ return unitDisplayName(u).replace(/-/g,' ').toUpperCase(); }
 function unitLabel(unit){
   const code=unitCodeOf(unit);
   return unitDisplayName(getUnits().find(x=>x.code===code) || {code});

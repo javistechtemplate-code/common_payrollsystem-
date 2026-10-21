@@ -1,6 +1,9 @@
 /* ================= HELPERS ================= */
 function fmt(n){ return '₹'+(Math.round((n||0)*100)/100).toLocaleString('en-IN'); }
-function todayStr(){ return new Date().toISOString().slice(0,10); }
+// Today's date in the user's own time zone (toISOString() is UTC, which in India is still
+// "yesterday" until 5:30 AM — night-shift entries landed on the wrong day).
+function localDateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function todayStr(){ return localDateStr(new Date()); }
 function monthKey(d){ return d.slice(0,7); }
 function daysInMonth(ym){ const [y,m]=ym.split('-').map(Number); return new Date(y,m,0).getDate(); }
 /* Display helper: converts a YYYY-MM-DD (or Date object) value into DD-MM-YYYY for
@@ -31,6 +34,8 @@ function isEmpOnRollOn(e, dateStr){
   if(e.employmentHistory && e.employmentHistory.some(h=>h.joinDate && h.resignDate && dateStr>=h.joinDate && dateStr<=h.resignDate)) return true;
   // Current stint.
   if(e.joining && dateStr<e.joining) return false;
+  // Inactive: on the roll up to the day before Inactive From (kept for history, never deleted).
+  if(e.status==='Inactive' && e.inactiveFrom) return dateStr < e.inactiveFrom;
   if(e.status!=='Resigned') return true;
   if(!e.resignationDate) return true;
   return dateStr <= e.resignationDate;
@@ -38,21 +43,14 @@ function isEmpOnRollOn(e, dateStr){
 function isEmpOnRollInMonth(e, ym){
   if(e.employmentHistory && e.employmentHistory.some(h=>h.joinDate && h.resignDate && ym>=monthKey(h.joinDate) && ym<=monthKey(h.resignDate))) return true;
   if(e.joining && ym<monthKey(e.joining)) return false;
+  if(e.status==='Inactive' && e.inactiveFrom) return ym <= monthKey(e.inactiveFrom);
   if(e.status!=='Resigned') return true;
   if(!e.resignationDate) return true;
   return ym <= monthKey(e.resignationDate);
 }
+// Daily wage of an employee (Basic + HRA per day).
 function calcGross(e){
-  return (Number(e.basic)||0)+(Number(e.hra)||0)+(Number(e.da)||0)+(Number(e.special)||0)+(Number(e.medical)||0)+(Number(e.conveyance)||0)+(Number(e.washing)||0)+(Number(e.other)||0);
-}
-function calcNet(e){
-  const gross=calcGross(e);
-  const esiWages=gross-(Number(e.washing)||0);
-  const esi = e.esiApplicable ? Math.round(esiWages*getSettings().esiRate) : 0;
-  const pfWages=(Number(e.basic)||0)+(Number(e.da)||0);
-  const pf = e.pfApplicable ? Math.round(pfWages*getSettings().pfRate) : 0;
-  const ded=pf+esi+(Number(e.pt)||0)+(Number(e.otherDed)||0)+(Number(e.rent)||0);
-  return gross-ded;
+  return (+e.dailyWage||0) || ((Number(e.basic)||0)+(Number(e.hra)||0));
 }
 function amountInWords(num){
   num=Math.round(num);

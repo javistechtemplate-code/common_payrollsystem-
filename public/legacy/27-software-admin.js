@@ -8,7 +8,7 @@
 function renderSoftwareAdmin(){
   if(!isSoftwareAdmin()) return denyMsg('view this page','Software Admin');
   return `
-  <div class="panel"><h3>🏢 Company Details</h3>
+  <div class="panel"><h3>${ico('building')} Company Details</h3>
     <p style="font-size:12px;color:var(--muted);">These appear in the header of printed slips and reports.</p>
     <div class="formGrid" style="align-items:flex-start;">
       <div>
@@ -32,19 +32,49 @@ function renderSoftwareAdmin(){
       <div><label>Phone</label><input id="s_companyPhone" value="${db.companyPhone||''}"></div>
       <div><label>Email</label><input id="s_companyEmail" value="${db.companyEmail||''}"></div>
     </div>
-    <p style="font-size:12px;color:var(--muted);margin-top:10px;">Unit details — used for unit-wise report sections.</p>
-    <div class="formGrid">
-      ${getUnits().map((u,i)=>`<div><label>${u.code} Name</label><input id="s_unitName_${i}" placeholder="(no name yet — shown as ${u.code})" value="${String(u.name||'').replace(/"/g,'&quot;')}"></div>
-      <div><label>${u.code} Address</label><input id="s_unitAddress_${i}" value="${String(u.address||'').replace(/"/g,'&quot;')}"></div>`).join('')}
+    <h4 style="margin:18px 0 4px;">Working Units</h4>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Units are shown as "${unitPrefix()?unitPrefix()+' ':''}Unit-1", "${unitPrefix()?unitPrefix()+' ':''}Unit-2" … (the first word of the Company Name). Edit a unit's address here and press Save — it changes everywhere the unit is shown (employee form and list, attendance, salary slips, acquittance register and reports). A unit can be deleted only while no employee (active, inactive or resigned) belongs to it.</p>
+    <div style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Unit</th><th>Address (printed on salary slips)</th><th>Employees</th><th></th></tr></thead>
+      <tbody>
+      ${getUnits().map(u=>{ const n=unitEmployeeCount(u.code); return `<tr>
+        <td><b>${unitDisplayName(u)}</b></td>
+        <td><input id="s_unitAddress_${u.code}" placeholder="(uses the Registered Address)" value="${String(u.address||'').replace(/"/g,'&quot;')}"></td>
+        <td>${n}</td>
+        <td class="rowActions"><button class="del" ${n?`disabled title="Move these ${n} employee(s) to another unit first"`:''} onclick="deleteWorkingUnit('${u.code}')">${ico('trash')} Delete</button></td>
+      </tr>`; }).join('')}
+      </tbody>
+    </table>
     </div>
-    <div class="modalActions"><button class="btn secondary" onclick="addWorkingUnit()">+ Add Unit</button><button class="btn" onclick="saveCompanySettings()">Save</button></div>
+    <h4 style="margin:22px 0 4px;">Contractors</h4>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Contractors supply employees; any contractor can supply employees to any unit. Rename a contractor here and press Save — it changes everywhere (employee form and list, salary slips, reports, Excel template). A contractor can be deleted only while no employee (active, inactive or resigned) was supplied by them.</p>
+    <div style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Contractor Name</th><th>Address</th><th>Phone</th><th>Employees</th><th></th></tr></thead>
+      <tbody>
+      ${getContractors().map(c=>{ const n=contractorEmployeeCount(c.code); const v=x=>String(x||'').replace(/"/g,'&quot;'); return `<tr>
+        <td><input id="s_contractorName_${c.code}" value="${v(c.name)}"></td>
+        <td><input id="s_contractorAddress_${c.code}" value="${v(c.address)}"></td>
+        <td><input id="s_contractorPhone_${c.code}" value="${v(c.phone)}"></td>
+        <td>${n}</td>
+        <td class="rowActions"><button class="del" ${n?`disabled title="Move these ${n} employee(s) to another contractor first"`:''} onclick="deleteContractor('${c.code}')">${ico('trash')} Delete</button></td>
+      </tr>`; }).join('') || '<tr><td colspan="5" style="color:var(--muted);">No contractors yet.</td></tr>'}
+      </tbody>
+    </table>
+    </div>
+    <div class="modalActions"><button class="btn secondary" onclick="addWorkingUnit()">${ico('plus')} Add Unit</button><button class="btn secondary" onclick="addContractor()">${ico('plus')} Add Contractor</button><button class="btn" onclick="saveCompanySettings()">Save</button></div>
+  </div>
+  <div class="panel"><h3>${ico('file-spreadsheet')} Bulk Import Employees</h3>
+    <p style="font-size:13px;color:var(--muted);">Add many new employees at once from an Excel file: download the template, fill one row per employee, then upload it. Rows are checked before anything is added. Bulk import is available only here; other users add employees one at a time from Employees → + Add Employee.</p>
+    <div class="modalActions" style="justify-content:flex-start;"><button class="btn" onclick="openBulkImport()">${ico('file-spreadsheet')} Bulk Import (Excel)</button></div>
   </div>
   ${renderUserRightsPanel()}
-  <div class="panel"><h3>💾 Data Backup &amp; Restore</h3>
+  <div class="panel"><h3>${ico('database')} Data Backup &amp; Restore</h3>
     <p style="font-size:13px;color:var(--muted);">All data is stored locally in this browser (no server). Take a backup regularly and store the file safely — clearing browser data, reinstalling the browser, or switching devices will erase records unless you restore from a backup.</p>
     <div class="modalActions" style="justify-content:flex-start;gap:10px;flex-wrap:wrap;">
-      <button class="btn" onclick="backupData()">⬇ Backup Data (Download)</button>
-      <button class="btn secondary" onclick="document.getElementById('restoreFileInput').click()">⬆ Restore Data (Upload)</button>
+      <button class="btn" onclick="backupData()">${ico('download')} Backup Data (Download)</button>
+      <button class="btn secondary" onclick="document.getElementById('restoreFileInput').click()">${ico('upload')} Restore Data (Upload)</button>
       <input type="file" id="restoreFileInput" accept="application/json,.json" style="display:none" onchange="restoreData(this.files[0])">
     </div>
     <p id="backupInfo" style="font-size:12px;color:var(--muted);margin-top:8px;"></p>
@@ -52,7 +82,7 @@ function renderSoftwareAdmin(){
     <p style="font-size:13px;color:var(--muted);">Danger zone.</p>
     <button class="btn danger" onclick="resetAllData()">Reset All Data</button>
   </div>
-  <div class="panel"><h3>⏱ Automatic Backup Scheduler</h3>
+  <div class="panel"><h3>${ico('timer')} Automatic Backup Scheduler</h3>
     <p style="font-size:13px;color:var(--muted);">Schedule backups to run on their own, saved as a download in the same location as manual backups above. This works while the app is open in a browser tab — keep a tab open (or open it once a day) so the schedule can trigger. If the app wasn't open at the scheduled time, the overdue backup runs automatically the next time it's opened.</p>
     <div class="formGrid">
       <div><label>Automatic Backup</label>
@@ -92,7 +122,7 @@ function renderSoftwareAdmin(){
       <tbody>
         ${(db.backupHistory||[]).slice().reverse().slice(0,50).map(h=>`<tr>
           <td>${h.date}</td><td>${h.time}</td><td>${h.type}</td>
-          <td>${h.status==='Success' ? '<span style="color:#0a7;">✔ Success</span>' : '<span style="color:#c33;">✘ Failed</span>'}</td>
+          <td>${h.status==='Success' ? '<span style="color:#0a7;">'+ico('circle-check')+' Success</span>' : '<span style="color:#c33;">'+ico('circle-x')+' Failed</span>'}</td>
         </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted);">No automatic backups have run yet.</td></tr>'}
       </tbody>
     </table>
@@ -108,7 +138,7 @@ function renderSoftwareAdmin(){
 function renderLoginLogsPanel(){
   const rows=(db.loginLogs||[]).slice().sort((a,b)=>String(b.loginTime).localeCompare(String(a.loginTime))).slice(0,100);
   return `
-  <div class="panel"><h3>🔐 Login Log <span style="font-size:12px;color:var(--muted);font-weight:400;">${(db.loginLogs||[]).length} session(s) recorded</span></h3>
+  <div class="panel"><h3>${ico('key')} Login Log <span style="font-size:12px;color:var(--muted);font-weight:400;">${(db.loginLogs||[]).length} session(s) recorded</span></h3>
     <p style="font-size:12px;color:var(--muted);">Every successful sign-in — after Username + Password AND the 4-digit OTP are both verified — is logged here with Login Time, Logout Time and Session Duration. A blank Logout Time/Duration means that session is either still open or the tab was closed without using Logout.</p>
     <div style="overflow-x:auto;max-height:340px;overflow-y:auto;">
     <table>

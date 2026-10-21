@@ -2,11 +2,16 @@
 // the employee field list (buildColumns(ctx.fields)), so the template always matches the Add
 // Employee form. ExcelJS is large, so it is loaded only when one of these functions is used.
 import { optionsOf, rowsFromGrid } from './employeeColumns.js';
-import { APP_NAME } from '../../config/brand.js';
 
 const SHEET_NAME = 'Employees';
 const DATA_ROWS = 1000; // rows (2..1001) that get dropdowns / formats
 const loadExcelJS = () => import('exceljs').then((m) => m.default || m);
+
+// Excel (and Google Sheets / LibreOffice) turn text that ENDS in a number into a series when it is
+// dragged down: "Unit-1" → Unit-2, Unit-3 … An invisible zero-width space after the number keeps
+// the dropdown text looking the same ("Unit-1") but makes dragging copy it. Stripped on import.
+const NO_SERIES = '\u200B';
+const dragSafe = (label) => (/\d$/.test(label) ? label + NO_SERIES : label);
 
 const columnLetter = (n) => {
   let s = '';
@@ -16,12 +21,12 @@ const columnLetter = (n) => {
 
 // Builds the empty template: header row (A1 = "S.No") locked, data rows open for typing, with
 // dropdowns for the fixed-choice columns and an Instructions sheet. Columns the Add Employee form
-// fills automatically (Employee Code, OT Rate, Canteen Rate) are greyed out and ignored on import —
+// fills automatically (Employee Code, Basic / day, HRA / day, 1-hour OT rate) are greyed out and ignored on import —
 // they are left unlocked so pasting whole rows from another sheet still works.
 export async function buildTemplate(columns, ctx = {}) {
   const ExcelJS = await loadExcelJS();
   const wb = new ExcelJS.Workbook();
-  wb.creator = APP_NAME;
+  wb.creator = ctx.companyName || 'Payroll';
   const ws = wb.addWorksheet(SHEET_NAME, { views: [{ state: 'frozen', ySplit: 1 }] });
   // Hidden sheet holding the dropdown lists (department names can be long or many).
   const lists = wb.addWorksheet('Lists', { state: 'hidden' });
@@ -56,8 +61,11 @@ export async function buildTemplate(columns, ctx = {}) {
     const range = `${letter}2:${letter}${DATA_ROWS + 1}`;
     if (col.auto) return;
     if (col.type === 'list') {
-      const options = optionsOf(col);
+      const options = optionsOf(col).map(dragSafe);
       if (!options.length) return;
+      // A typed "Unit-1" (without the invisible character) is still fine — import accepts it — so
+      // those columns only warn instead of blocking typed values.
+      const hasDragSafe = options.some((o) => o.endsWith(NO_SERIES));
       // Write the choices straight into the dropdown ("A,B,C") — this shows an arrow in Excel,
       // Google Sheets, WPS and LibreOffice alike. Excel limits that to 255 characters, so very
       // long lists (e.g. many departments) fall back to a range on the hidden Lists sheet.
@@ -79,15 +87,23 @@ export async function buildTemplate(columns, ctx = {}) {
         promptTitle: col.header,
         prompt: 'Choose from the list ▼',
         showErrorMessage: true,
+        errorStyle: hasDragSafe ? 'warning' : 'stop',
         errorTitle: col.header,
-        error: `Choose a value from the list: ${options.join(', ')}`,
+        error: `Choose a value from the list: ${optionsOf(col).join(', ')}`,
       });
     } else if (col.type === 'date') {
+      // DD-MM-YYYY on every cell of the column (not only the column style), so Excel, Google
+      // Sheets and LibreOffice all show dates in that format.
+      for (let r = 2; r <= DATA_ROWS + 1; r++) ws.getCell(`${letter}${r}`).numFmt = 'dd-mm-yyyy';
       ws.dataValidations.add(range, {
         type: 'date',
         operator: 'between',
         allowBlank: true,
         formulae: [new Date(Date.UTC(1900, 0, 2)), new Date(Date.UTC(2100, 11, 31))],
+        // Shown on every cell of the column: the expected format.
+        showInputMessage: true,
+        promptTitle: 'Format: DD-MM-YYYY',
+        prompt: 'Type the date as DD-MM-YYYY, e.g. 25-04-1995. Leave empty if not known.',
         showErrorMessage: true,
         errorTitle: col.header,
         error: 'Enter a date, e.g. 25-04-2024',
@@ -105,10 +121,28 @@ export async function buildTemplate(columns, ctx = {}) {
     }
   });
 
+  // Calculated columns (e.g. Basic = 60% of Daily Wage): fill every data row with the formula,
+  // e.g. "ROUND({dailyWage}*60%,2)" → =IF(P2="","",ROUND(P2*60%,2)). Locked so they can't be typed
+  // over; they stay blank until the referenced cell is filled, and are ignored on import.
+  const letterOf = Object.fromEntries(columns.map((c, i) => [c.key, columnLetter(i + 1)]));
+  columns.forEach((col, i) => {
+    if (!col.formula) return;
+    const refs = [...col.formula.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => letterOf[k]);
+    if (!refs.length) return;
+    const letter = columnLetter(i + 1);
+    for (let r = 2; r <= DATA_ROWS + 1; r++) {
+      const expr = col.formula.replace(/\{(\w+)\}/g, (m, k) => (letterOf[k] ? `${letterOf[k]}${r}` : m));
+      const cell = ws.getCell(`${letter}${r}`);
+      cell.value = { formula: `IF(${letterOf[refs[0]]}${r}="","",${expr})` };
+      cell.protection = { locked: true };
+    }
+  });
+
   // Lock the header row: protect the sheet; every other cell is unlocked by the column style.
   await ws.protect('', {
     selectLockedCells: true,
     selectUnlockedCells: true,
+    formatCells: true, // fill colour / highlighting while editing
     formatColumns: true,
     formatRows: true,
     insertRows: true,
@@ -119,18 +153,24 @@ export async function buildTemplate(columns, ctx = {}) {
 
   const help = wb.addWorksheet('Instructions');
   help.columns = [{ width: 30 }, { width: 90 }];
-  help.addRow([`${APP_NAME} — Employee Bulk Import`]).font = { bold: true, size: 14 };
+  help.addRow([(ctx.companyName || 'Payroll') + ' — Employee Bulk Import']).font = { bold: true, size: 14 };
   help.addRow([]);
   [
     ['How to use', 'Fill one employee per row on the "Employees" sheet, starting from row 2. Do not change the header row (it is locked).'],
     ['S.No', 'Serial number (1, 2, 3…). Only used to point you to a row if something needs fixing.'],
-    ['Required', 'Only "Full Name" is required. Empty dropdown cells use the same default as the Add Employee form.'],
-    ['Dropdowns', 'Status, Gender, Department, Employment Type, Working Unit, Payment Mode, PF Deduction and ESI Deduction have a dropdown in every row — click a cell and use the ▼ arrow.'],
-    ['Grey columns', 'Employee Code, OT Rate and Canteen Rate are filled automatically, exactly as in the Add Employee form. Leave them empty — anything typed there is ignored.'],
+    ['Required', 'Only "Full Name" is required. Fill whatever details you have — empty cells are left empty and can be completed later in the Employee form.'],
+    ['Dropdowns', 'Status, Gender, Department, Designation, Employment Type, Working Unit, Contractor and Payment Mode have a dropdown in every row — click a cell and use the ▼ arrow. Departments and Designations come from the lists in the app.'],
+    ['Daily Wage', 'Enter the TOTAL daily wage (₹ per day). Basic = 60%, HRA = 40% and the 1-hour OT rate (Daily Wage ÷ 8 × 1.5) are calculated by the grey columns automatically. OT hours are not entered here — they come from Employee Time Entry each month (a figure typed on the Attendance screen overrides it) and are paid by Payroll at Daily Wage ÷ 8 × 1.5.'],
+    ['Grey columns', 'Employee Code, Basic / day, HRA / day and OT Rate — 1 hour are calculated automatically, exactly as in the Add Employee form. They are locked and ignored on import.'],
+    ['PF / ESI', 'Not needed here: new employees start with PF and ESI deduction = Yes, and Payroll calculates the amounts. Change it later in the Employee form if someone is exempted.'],
     ['New employees', 'This sheet is for adding new employees, so Status is always Active. Resignations are recorded later from the Employees page.'],
-    ['Dates', 'Use DD-MM-YYYY (e.g. 25-04-2024).'],
-    ['Amounts', 'Monthly amounts in ₹, numbers only.'],
-    ['Department', 'Must be one of the departments already set up in the app: ' + (ctx.departments || []).join(', ')],
+    ['Dates', 'Date of Birth and Joining Date: DD-MM-YYYY (e.g. 25-04-2024). Selecting a cell in those columns shows the format.'],
+    ['None', 'Every dropdown except Status has a "None" choice (Contractor: "Non Contractor") that leaves the field empty — the same as leaving the cell blank.'],
+    ['Highlighting', 'You can colour cells (Home → Fill Color) to mark rows while editing; colours are ignored on import.'],
+    ['Copying down', 'Dragging a dropdown value (e.g. Unit-1) down copies the same value. To copy the SAME date down, hold Ctrl while dragging — otherwise Excel counts the dates up.'],
+    ['Amounts', 'Numbers only. Canteen Tokens = tokens bought per month.'],
+    ['Department', 'Must be one of the departments set up in the app: ' + ((ctx.departments || []).join(', ') || '(none yet)')],
+    ['Designation', 'Must be one of the designations set up in the app (Admin → Designations): ' + ((ctx.designations || []).join(', ') || '(none yet)')],
     ['After import', 'Every imported employee can be edited later from the Employees page (✏️ Edit).'],
   ].forEach((r) => {
     const row = help.addRow(r);
@@ -143,9 +183,11 @@ export async function buildTemplate(columns, ctx = {}) {
   return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
-// Plain value of a cell (ExcelJS gives objects for formulas, links and rich text).
+// Plain value of a cell (ExcelJS gives objects for formulas, links and rich text). The invisible
+// "no series" character added to dropdown values is removed here.
 function cellValue(v) {
   if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return v.replace(/\u200B/g, '');
   if (v instanceof Date) return v;
   if (typeof v === 'object') {
     if ('result' in v) return cellValue(v.result);

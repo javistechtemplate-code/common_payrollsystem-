@@ -1,25 +1,23 @@
 {
-  "name": "payroll-template",
+  "name": "vipl-payroll-erp",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "test": "node tests/run-all.mjs",
-    "test:scan": "node tests/scan-identity.mjs",
-    "test:golden": "node tests/golden-master.test.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
     "exceljs": "^4.4.0",
+    "lucide": "^1.59.0",
+    "lucide-react": "^1.59.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",
-    "playwright": "1.56.1",
     "vite": "^6.4.3"
   }
 }

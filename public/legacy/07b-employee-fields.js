@@ -26,38 +26,52 @@ function employeeFieldSections(){
   return [
     {key:'basic',  title:'Basic Information'},
     {key:'bank',   title:'Bank &amp; Statutory Details'},
-    {key:'salary', title:'Salary Details (Monthly ₹ — "Scale")'}
+    {key:'salary', title:'Salary Details (Daily Wage ₹)'}
   ];
 }
 function employeeFields(){
   const opts = list => list.map(v => ({value:v, label:v}));
+  // Dropdowns that may stay empty: a blank first choice (left out of the Excel dropdown — an empty
+  // cell means "not given", and import keeps it empty).
+  const blankOpt = list => [{value:'', label:'— Select —'}, ...opts(list)];
+  // The employee's current value stays selectable even if it was later removed from the list.
+  const withCurrent = (list, cur) => (cur && !list.includes(cur)) ? [...list, cur] : list;
   const resignedWrap = (e, extra) => (extra||'') + ` style="${e.status==='Resigned'?'':'display:none;'}"`;
+  const inactiveWrap = (e, extra) => (extra||'') + ` style="${e.status==='Inactive'?'':'display:none;'}"`;
   return [
     // ---- Basic Information ----
     {key:'code', label:'Employee Code', section:'basic', input:'text', auto:true, id:'',
       formValue:e=>e.code||'(auto)', width:14},
-    {key:'status', label:'Status', section:'basic', input:'select', options:opts(['Active','Resigned']),
-      attrs:'onchange="toggleResignationField(this.value)"', formValue:e=>e.status||'Active', sheetOptions:['Active'], width:11},
+    {key:'status', label:'Status', section:'basic', input:'select', options:opts(['Active','Inactive','Resigned']),
+      attrs:'onchange="toggleResignationField(this.value)"', formValue:e=>e.status||'Active', sheetOptions:['Active'], blankDefault:true, width:11},
+    {key:'inactiveFrom', label:'Inactive From', section:'basic', input:'date', sheet:false,
+      wrap:e=>inactiveWrap(e,' id="f_inactiveWrap"')},
     {key:'resignationDate', label:'Resignation Date', section:'basic', input:'date', sheet:false,
       wrap:e=>resignedWrap(e,' id="f_resignationWrap"')},
     {key:'resignReason', label:'Reason for Resignation (Optional)', section:'basic', input:'text', sheet:false, full:true,
       wrap:e=>resignedWrap(e,' id="f_resignReasonWrap"'), readValue:v=>String(v).trim()},
     {key:'name', label:'Full Name *', section:'basic', input:'text', required:true, attrs:'required', readValue:v=>String(v).trim(), width:26},
-    {key:'gender', label:'Gender', section:'basic', input:'select', options:opts(['Male','Female','Other']), width:10},
-    {key:'dob', label:'Date of Birth', section:'basic', input:'date', width:14},
+    {key:'gender', label:'Gender', section:'basic', input:'select', options:blankOpt(['Male','Female','Other']), width:10},
+    {key:'dob', label:'Date of Birth', sheetLabel:'Date of Birth (DD-MM-YYYY)', section:'basic', input:'date', width:16},
     {key:'relative', label:'Father / Husband Name', section:'basic', input:'text', width:22},
     {key:'mobile', label:'Mobile Number', section:'basic', input:'text', width:15},
     {key:'email', label:'Email', section:'basic', input:'text', width:24},
     {key:'address', label:'Address', section:'basic', input:'text', full:true, width:32},
-    {key:'joining', label:'Joining Date', section:'basic', input:'date', width:14},
+    {key:'joining', label:'Joining Date', sheetLabel:'Joining Date (DD-MM-YYYY)', section:'basic', input:'date', width:16},
     {key:'department', label:'Department', section:'basic', input:'select', id:'f_dept',
-      options:()=>opts(db.departments||[]), width:16},
-    {key:'designation', label:'Designation', section:'basic', input:'text', width:18},
-    {key:'empType', label:'Employment Type', section:'basic', input:'select', options:opts(['Full-Time','Part-Time','Contract']), width:15},
+      options:e=>blankOpt(withCurrent(db.departments||[], e&&e.department)), width:16},
+    // Managed list (Admin → Designations), like Departments.
+    {key:'designation', label:'Designation', section:'basic', input:'select',
+      options:e=>blankOpt(withCurrent(designationList(), e&&e.designation)), width:18},
+    {key:'empType', label:'Employment Type', section:'basic', input:'select', options:blankOpt(['Full-Time','Part-Time','Contract']), width:15},
     {key:'unit', label:'Working Unit', section:'basic', input:'select',
       // Import also accepts just the unit name or number ("Unit-1").
-      options:()=>getUnits().map(u=>({value:u.code, label:unitDisplayName(u), aliases:u.name?[u.name]:[]})),
+      options:()=>getUnits().map(u=>({value:u.code, label:unitDisplayName(u), aliases:[u.code].concat(u.name?[u.name]:[])})),
       formValue:e=>unitCodeOf(e.unit), width:16},
+    // Who supplied the employee — independent of the unit (see 06c-contractors.js).
+    {key:'contractor', label:'Contractor', section:'basic', input:'select',
+      options:()=>[{value:'', label:'Non Contractor'}, ...getContractors().map(c=>({value:c.code, label:c.name||c.code, aliases:[c.code]}))],
+      formValue:e=>e.contractor||'', width:22},
     // ---- Bank & Statutory Details ----
     {key:'bankName', label:'Bank Name', section:'bank', input:'text', width:18},
     {key:'branch', label:'Branch', section:'bank', input:'text', width:16},
@@ -69,38 +83,56 @@ function employeeFields(){
     {key:'esiNo', label:'ESI Number', section:'bank', input:'text', width:16},
     {key:'uan', label:'UAN Number', section:'bank', input:'text', width:16},
     // ---- Salary Details ----
-    {key:'basic', label:'Basic Salary', section:'salary', input:'number', width:13},
-    {key:'hra', label:'HRA', section:'salary', input:'number', width:10},
-    {key:'da', label:'DA', section:'salary', input:'number', width:10},
-    {key:'special', label:'Special Allowance', section:'salary', input:'number', width:12},
-    {key:'medical', label:'Medical Allowance', section:'salary', input:'number', width:12},
-    {key:'conveyance', label:'Conveyance', section:'salary', input:'number', width:12},
-    {key:'washing', label:'Washing Allowance', section:'salary', input:'number', width:12},
-    {key:'other', label:'Other Allowance', section:'salary', input:'number', width:12},
-    {key:'otRate', label:'OT Rate (auto: Basic ÷ 26 ÷ 8 hrs × 2)', section:'salary', input:'number', auto:true,
-      title:'OT rate is auto-calculated from Basic salary ÷ 26 ÷ 8 hrs × 2 and is no longer entered manually.', width:16},
-    {key:'mode', label:'Payment Mode', section:'salary', input:'select', options:opts(['NEFT','TRANSFER','CASH','CHEQUE']), width:13},
+    // Daily wage (TOTAL per day). Basic and HRA follow from it automatically — see
+    // dailyWageSplit(); the Excel template carries the same formulas (sheetFormula). The 1-hour OT
+    // rate is only SHOWN (displayOnly — never stored): Payroll works it out itself (Daily Wage ÷ 8 × 1.5).
+    {key:'dailyWage', label:'Daily Wage — TOTAL (₹ per day)', section:'salary', input:'number',
+      attrs:'oninput="updateWageSplit(this.value)"', formValue:e=>e.dailyWage||0, width:16},
+    {key:'basic', label:'Basic / day (60%)', section:'salary', input:'number', auto:true,
+      title:'Basic = 60% of the Daily Wage', sheetFormula:'ROUND({dailyWage}*60%,2)', width:13},
+    {key:'hra', label:'HRA / day (40%)', section:'salary', input:'number', auto:true,
+      title:'HRA = 40% of the Daily Wage', sheetFormula:'ROUND({dailyWage}*40%,2)', width:13},
+    {key:'otRate', label:'OT Rate — 1 hour (₹)', section:'salary', input:'number', auto:true, displayOnly:true,
+      title:'1-hour OT rate = Daily Wage ÷ 8 × 1.5 (shown for reference; Payroll calculates OT from the monthly OT hours in Employee Time Entry (or a figure typed on Attendance))',
+      formValue:e=>dailyWageSplit(e.dailyWage).otRate, sheetFormula:'ROUND({dailyWage}/8*1.5,0)', width:13},
+    {key:'mode', label:'Payment Mode', section:'salary', input:'select', options:blankOpt(['NEFT','TRANSFER','CASH','CHEQUE']), width:13},
     // Stored as pfDeduction ('yes'|'no'|'nil') plus the pfApplicable flag used by payroll.
-    {key:'pfDeduction', label:'PF Deduction', section:'salary', input:'select', id:'f_pfApplicable',
+    // PF / ESI Deduction are set in the form only — not in the bulk-import sheet (new employees
+    // start at Yes; Payroll calculates the amounts).
+    {key:'pfDeduction', label:'PF Deduction', section:'salary', input:'select', id:'f_pfApplicable', sheet:false,
       options:[{value:'yes',label:'Yes'},{value:'no',label:'Exempted'},{value:'nil',label:'Nil'}],
       formValue:e=>e.pfDeduction || (e.pfApplicable===false ? 'no' : 'yes'),
       readValue:v=>({pfDeduction:v, pfApplicable:v==='yes'}), width:13},
-    {key:'esiApplicable', label:'ESI Deduction', section:'salary', input:'select',
+    {key:'esiApplicable', label:'ESI Deduction', section:'salary', input:'select', sheet:false,
       options:[{value:'yes',label:'Yes'},{value:'no',label:'Exempted'}],
       formValue:e=>e.esiApplicable===false ? 'no' : 'yes',
       readValue:v=>v==='yes', width:13},
-    {key:'pt', label:'Professional Tax / Income Tax', section:'salary', input:'number', width:14},
-    {key:'canteenRate', label:'Canteen Rate (per day ₹) — not used in payroll', section:'salary', input:'number', auto:true,
-      title:'Fixed per-day canteen deduction has been removed from payroll. Only Lunch/Dinner tokens are deducted now.', width:16},
-    {key:'rent', label:'Rent Deduction (monthly)', section:'salary', input:'number', width:13},
-    {key:'otherDed', label:'Other Deductions (fixed)', section:'salary', input:'number', width:13},
-    {key:'clBalance', label:'CL Balance', section:'salary', input:'number', width:10},
-    {key:'noplBalance', label:'NOPL Balance (Opening)', section:'salary', input:'number',
-      title:'Opening NOPL (Paid Leave) balance. Paid Leave marked in Attendance is auto-deducted from this to get the balance shown on the Salary Slip.', width:12}
+    // Canteen tokens bought each month — deducted at the Canteen Token Price (Payroll Process).
+    // This is the usual monthly count; it can be changed for a single month on the Attendance screen.
+    {key:'canteenTokens', label:'Canteen Tokens (per month)', section:'salary', input:'number',
+      title:'Number of canteen tokens this employee buys each month. Deducted from salary at the Canteen Token Price set in Payroll Process.', width:14}
   ];
 }
+// Daily wage → Basic (60%), HRA (40%) and OT rate per hour (wage ÷ 8 × 1.5), same as the sheet.
+// The OT rate is used by Payroll only; employee records store dailyWage / basic / hra
+// (employeeWageFields()).
+function dailyWageSplit(wage){
+  const w=Math.max(0, +wage||0);
+  return { dailyWage:w, basic:Math.round(w*0.6*100)/100, hra:Math.round(w*0.4*100)/100, otRate:Math.round(w/8*1.5) };
+}
+function employeeWageFields(wage){
+  const s=dailyWageSplit(wage);
+  return { dailyWage:s.dailyWage, basic:s.basic, hra:s.hra };
+}
+// Live update of the read-only Basic / HRA / 1-hour OT rate while the Daily Wage is typed in the form.
+function updateWageSplit(v){
+  const s=dailyWageSplit(v);
+  [['f_basic',s.basic],['f_hra',s.hra],['f_otRate',s.otRate]].forEach(([id,val])=>{ const el=document.getElementById(id); if(el) el.value=val; });
+}
 function employeeFieldId(f){ return f.id===undefined ? 'f_'+f.key : f.id; }
-function employeeFieldOptions(f){ return typeof f.options==='function' ? f.options() : (f.options||[]); }
+function employeeFieldOptions(f, e){ return typeof f.options==='function' ? f.options(e) : (f.options||[]); }
+// Designations (Admin → Designations); the dropdown in the form and the Excel template.
+function designationList(){ return Array.isArray(db.designations) ? db.designations : []; }
 function employeeFieldFormValue(f, e){
   if(f.formValue) return f.formValue(e);
   const v=e[f.key];
@@ -120,7 +152,7 @@ function employeeFormHtml(e){
       const extra=(f.attrs?' '+f.attrs:'')+(f.auto?' disabled':'')+(f.title?` title="${empAttr(f.title)}"`:'');
       let control;
       if(f.input==='select'){
-        control=`<select${idAttr}${extra}>${employeeFieldOptions(f).map(o=>`<option value="${empAttr(o.value)}" ${String(val)===String(o.value)?'selected':''}>${o.label}</option>`).join('')}</select>`;
+        control=`<select${idAttr}${extra}>${employeeFieldOptions(f,e).map(o=>`<option value="${empAttr(o.value)}" ${String(val)===String(o.value)?'selected':''}>${o.label}</option>`).join('')}</select>`;
       }else{
         const type=f.input==='text' ? '' : ` type="${f.input}"`;
         control=`<input${type}${idAttr} value="${empAttr(val)}"${extra}>`;
@@ -140,7 +172,7 @@ function readEmployeeFormFields(){
   employeeFields().forEach(f=>{
     const id=employeeFieldId(f);
     const el=id ? document.getElementById(id) : null;
-    if(!el) return;
+    if(!el || f.displayOnly) return; // displayOnly fields (1-hour OT rate) are shown, never saved
     const raw=el.value;
     const v = f.readValue ? f.readValue(raw) : (f.input==='number' ? (+raw||0) : raw);
     if(v && typeof v==='object' && !Array.isArray(v)) Object.assign(out, v); else out[f.key]=v;
@@ -150,9 +182,13 @@ function readEmployeeFormFields(){
 // Field list for the Bulk Import template (React side): only sheet columns, with resolved options.
 function employeeSheetFields(){
   return employeeFields().filter(f=>f.sheet!==false).map(f=>({
-    key:f.key, label:f.label, input:f.input, auto:!!f.auto, required:!!f.required, width:f.width||14,
+    key:f.key, label:f.sheetLabel||f.label, altLabels:f.sheetLabel?[f.label]:[], input:f.input, auto:!!f.auto, required:!!f.required,
+    blankDefault:!!f.blankDefault, width:f.width||14, formula:f.sheetFormula||'',
+    // Every dropdown (except Status) ends with a "None" choice that leaves the field empty — the
+    // Contractor dropdown calls it "Non Contractor". An empty cell means the same.
     options: f.input==='select'
-      ? employeeFieldOptions(f).filter(o=>!f.sheetOptions || f.sheetOptions.includes(o.value)).map(o=>({value:o.value, label:String(o.label), aliases:o.aliases||[]}))
+      ? employeeFieldOptions(f).filter(o=>o.value!=='' && (!f.sheetOptions || f.sheetOptions.includes(o.value))).map(o=>({value:o.value, label:String(o.label), aliases:o.aliases||[]}))
+          .concat(f.key==='status' ? [] : [f.key==='contractor' ? {value:'', label:'Non Contractor', aliases:['None']} : {value:'', label:'None', aliases:[]}])
       : undefined
   }));
 }
@@ -161,14 +197,16 @@ function employeeSheetFields(){
 function employeeRecordFromSheet(values){
   const out={};
   employeeFields().forEach(f=>{
-    if(f.key==='code') return;
+    if(f.key==='code' || f.displayOnly) return;
     let raw = f.auto ? (f.input==='number' ? 0 : '') : values[f.key];
     if(raw===undefined || raw===null) raw = f.input==='number' ? 0 : '';
     if(f.input==='number'){ out[f.key]=+raw||0; return; }
     if(f.input==='select'){
-      // values hold the option value already (e.g. 'yes'); fall back to the form default.
+      // values hold the option value already (e.g. 'yes'). An empty cell stays empty — except Status
+      // (always Active) and the fields not in the sheet (PF/ESI Deduction), which take the form default.
       const options=employeeFieldOptions(f);
-      const val = options.some(o=>String(o.value)===String(raw)) ? raw : employeeFieldFormValue(f,{});
+      const val = options.some(o=>String(o.value)===String(raw)) ? raw
+        : (raw==='' && !f.blankDefault && f.sheet!==false) ? '' : employeeFieldFormValue(f,{});
       const v = f.readValue ? f.readValue(val) : val;
       if(v && typeof v==='object' && !Array.isArray(v)) Object.assign(out, v); else out[f.key]=v;
       return;

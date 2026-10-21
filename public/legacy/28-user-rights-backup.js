@@ -18,7 +18,7 @@ function renderUserRightsPanel(){
     ? ['Admin','Software Admin','HR','Accounts','Viewer']
     : ['HR','Accounts','Viewer'];
   return `
-  <div class="panel"><h3>👤 User Management</h3>
+  <div class="panel"><h3>${ico('user')} User Management</h3>
     <p style="font-size:12px;color:var(--muted);">
       ${actorIsSA
         ? 'As <b>Software Admin</b> — the highest-level software authority — you can create, edit, delete and activate/deactivate every account, including other Admin and Software Admin accounts, and assign any role.'
@@ -35,7 +35,7 @@ function renderUserRightsPanel(){
           <td>${u.active===false ? '<span style="color:#c33;">Inactive</span>' : '<span style="color:#0a7;">Active</span>'}</td>
           <td style="white-space:nowrap;">
             <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editUser(${i})">Edit</button>
-            ${u.username!=='admin' && u.role!=='Admin' && u.role!=='Software Admin' ? `<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="openPermissionsModal(${i})">🔐 Permissions</button>` : ''}
+            ${u.username!=='admin' && u.role!=='Admin' && u.role!=='Software Admin' ? `<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="openPermissionsModal(${i})">${ico('key')} Permissions</button>` : ''}
             ${u.username!=='admin' ? `<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleUserActive(${i})">${u.active===false?'Activate':'Deactivate'}</button>` : ''}
             ${u.username!=='admin' ? `<button class="btn danger" style="padding:5px 10px;font-size:12px;" onclick="deleteUser(${i})">Delete</button>` : ''}
           </td>
@@ -51,12 +51,12 @@ function renderUserRightsPanel(){
     </div>
     <p style="font-size:12px;color:var(--muted);">
       ${actorIsSA
-        ? 'New users get sensible default permissions for their role — fine-tune them afterwards with the 🔐 Permissions button.'
-        : 'Admin cannot create Admin or Software Admin accounts — only the roles above are available. New users get sensible default permissions — fine-tune them afterwards with the 🔐 Permissions button.'}
+        ? 'New users get sensible default permissions for their role — fine-tune them afterwards with the '+ico('key')+' Permissions button.'
+        : 'Admin cannot create Admin or Software Admin accounts — only the roles above are available. New users get sensible default permissions — fine-tune them afterwards with the '+ico('key')+' Permissions button.'}
     </p>
     <div class="modalActions"><button class="btn" onclick="addUser()">Add User</button></div>
   </div>
-  <div class="panel"><h3>🔐 User Rights Management</h3>
+  <div class="panel"><h3>${ico('key')} User Rights Management</h3>
     <p style="font-size:12px;color:var(--muted);">Pick a user, tick the permissions they should have for each module, then Save. Users only see and can perform the actions checked here. ${actorIsSA ? '' : 'Access to the Software Admin module itself is never granted from here — it is controlled solely by the Admin / Software Admin role, which only a Software Admin can assign.'}</p>
     ${renderPermissionsMatrix()}
   </div>`;
@@ -140,7 +140,7 @@ function backupData(){
   if(!isSoftwareAdmin() && !isAdmin()){ alert('Only the Admin or Software Admin can access data backup.'); return; }
   try{
     const payload={
-      app:APP_NAME,
+      app:db.companyName||DEFAULT_BRAND_NAME,
       dbKey:DB_KEY,
       exportedAt:new Date().toISOString(),
       data:db
@@ -151,7 +151,7 @@ function backupData(){
     const stamp=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
     const a=document.createElement('a');
     a.href=url;
-    a.download=`${APP_NAME.replace(/[^A-Za-z0-9]+/g,'-')}-Backup-${stamp}.json`;
+    a.download=`${companyFilePrefix()}-Payroll-Backup-${stamp}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -172,7 +172,7 @@ function restoreData(file){
       const parsed=JSON.parse(e.target.result);
       const incoming = (parsed && typeof parsed==='object' && 'data' in parsed) ? parsed.data : parsed;
       if(!incoming || typeof incoming!=='object' || !('employees' in incoming)){
-        alert('This file does not look like a valid '+APP_NAME+' backup.');
+        alert('This file does not look like a valid payroll backup.');
         return;
       }
       // Keep the current user profiles — login accounts live in Supabase Auth, not in backups —
@@ -187,6 +187,12 @@ function restoreData(file){
         return;
       }
       db=incoming;
+      // Older backups pre-date the contractor list / numbered units — convert them like initDB().
+      ensureDepartments();
+      ensureContractors();
+      ensureUnits();
+      await saveDB(db);
+      applyCompanyBranding();
       alert('Data restored successfully and saved to the database.');
       render('softwareadmin');
     }catch(err){
@@ -249,14 +255,14 @@ function logBackupHistory(type, status){
 function runAutoBackup(typeLabel){
   const type = typeLabel || (db.autoBackup ? (db.autoBackup.frequency.charAt(0).toUpperCase()+db.autoBackup.frequency.slice(1)) : 'Manual Trigger');
   try{
-    const payload={ app:APP_NAME, dbKey:DB_KEY, exportedAt:new Date().toISOString(), data:db };
+    const payload={ app:db.companyName||DEFAULT_BRAND_NAME, dbKey:DB_KEY, exportedAt:new Date().toISOString(), data:db };
     const json=JSON.stringify(payload,null,2);
     const blob=new Blob([json],{type:'application/json'});
     const url=URL.createObjectURL(blob);
     const stamp=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
     const a=document.createElement('a');
     a.href=url;
-    a.download=`${APP_NAME.replace(/[^A-Za-z0-9]+/g,'-')}-AutoBackup-${stamp}.json`;
+    a.download=`${companyFilePrefix()}-Payroll-AutoBackup-${stamp}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -301,45 +307,98 @@ if(document.readyState==='complete') dbReady.then(startAutoBackupWatcher);
 function savePayrollConstants(){
   if(!hasPerm('payroll','edit')){ alert('You do not have permission to edit payroll constants.'); return; }
   const s=getSettings();
-  s.esiRate=+document.getElementById('s_esiRate').value||0.0075;
-  s.esiEmployerRate=+document.getElementById('s_esiEmployerRate').value||0.0325;
-  s.pfRate=+document.getElementById('s_pfRate').value||0.12;
-  s.pfEmployerRate=+document.getElementById('s_pfEmployerRate').value||0.12;
-  s.canteenLunchRate=+document.getElementById('s_canteenLunchRate').value||0;
-  s.canteenDinnerRate=+document.getElementById('s_canteenDinnerRate').value||0;
+  // A blank box keeps the default; 0 is a valid rate (it used to snap back to the default).
+  const rate=(id,def)=>{ const v=String(document.getElementById(id).value).trim(); return v===''||isNaN(+v) ? def : Math.max(0, +v); };
+  s.esiRate=rate('s_esiRate', 0.0075);
+  s.esiEmployerRate=rate('s_esiEmployerRate', 0.0325);
+  s.pfRate=rate('s_pfRate', 0.12);
+  s.pfEmployerRate=rate('s_pfEmployerRate', 0.12);
+  const tp=document.getElementById('s_canteenTokenPrice').value;
+  s.canteenTokenPrice = tp==='' ? 150 : Math.max(0, +tp||0);
+  const lg=document.getElementById('s_lateGraceMinutes').value;
+  s.lateGraceMinutes = lg==='' ? 120 : Math.max(0, Math.round(+lg||0));
   saveDB(db);
-  alert('Payroll constants saved.');
+  alert('Payroll constants saved. They apply to months generated from now on; to apply them to a month already generated, open Payroll for that month and click Regenerate Payroll.');
   render('payrollprocess');
 }
-// Adds the next working unit (Unit-5, Unit-6, …). Existing units are never removed or renumbered.
+// Adds the next working unit (Unit-5, Unit-6, …). Existing units are never renumbered.
 function addWorkingUnit(){
   if(!isSoftwareAdmin()){ alert('Only the Software Admin can add units.'); return; }
-  const name=prompt('Name of the new working unit — leave blank to add the name later (save any other changes on this page first):');
-  if(name===null) return;
-  ensureUnits();
   const next=Math.max(0,...db.units.map(u=>+((String(u.code).match(/(\d+)$/)||[0,0])[1])))+1;
-  db.units.push({code:'Unit-'+next, name:name.trim(), address:''});
+  if(!confirm(`Add ${unitDisplayName({code:'Unit-'+next})}? (Save any other changes on this page first.)`)) return;
+  readCompanySettingsForm(); // keep anything typed on the page
+  db.units.push({code:'Unit-'+next, name:'', address:''});
+  db.removedUnits=(db.removedUnits||[]).filter(c=>c!=='Unit-'+next);
+  saveDB(db);
+  render('softwareadmin');
+}
+// Deletes a working unit that no employee belongs to (employee history must keep its unit).
+// Anything else typed on the page is kept and saved along with it.
+function deleteWorkingUnit(code){
+  if(!isSoftwareAdmin()){ alert('Only the Software Admin can delete units.'); return; }
+  const n=unitEmployeeCount(code);
+  if(n){ alert(`${unitLabel(code)} still has ${n} employee(s) (including inactive/resigned). Move them to another unit first — Employees → Edit → Working Unit.`); return; }
+  if(getUnits().length<=1){ alert('At least one working unit is needed.'); return; }
+  if(!confirm(`Delete ${unitLabel(code)}? It will no longer be offered anywhere.`)) return;
+  readCompanySettingsForm();
+  db.units=db.units.filter(u=>u.code!==code);
+  if(!Array.isArray(db.removedUnits)) db.removedUnits=[];
+  if(!db.removedUnits.includes(code)) db.removedUnits.push(code);
+  syncLegacyUnitFields();
+  saveDB(db);
+  render('softwareadmin');
+}
+// Copies the Company Details form (company fields + each unit's name/address) into db.
+function readCompanySettingsForm(){
+  const val=id=>{ const el=document.getElementById(id); return el ? el.value : null; };
+  [['companyName','s_companyName'],['companyAddress','s_companyAddress'],['companyGSTIN','s_companyGSTIN'],['companyPAN','s_companyPAN'],
+   ['companyCIN','s_companyCIN'],['companyPhone','s_companyPhone'],['companyEmail','s_companyEmail']].forEach(([k,id])=>{
+    const v=val(id); if(v!==null) db[k]=v;
+  });
+  ensureUnits();
+  db.units.forEach(u=>{
+    const n=val('s_unitName_'+u.code), a=val('s_unitAddress_'+u.code);
+    if(n!==null) u.name=n.trim(); // blank = no name yet (shown as just the unit number)
+    if(a!==null) u.address=a;
+  });
+  syncLegacyUnitFields();
+  getContractors().forEach(c=>{
+    const n=val('s_contractorName_'+c.code), a=val('s_contractorAddress_'+c.code), p=val('s_contractorPhone_'+c.code);
+    if(n!==null && n.trim()) c.name=n.trim(); // a contractor always keeps a name
+    if(a!==null) c.address=a;
+    if(p!==null) c.phone=p;
+  });
+}
+// Adds a contractor (C-5, C-6, …). Contractors are never renumbered.
+function addContractor(){
+  if(!isSoftwareAdmin()){ alert('Only the Software Admin can add contractors.'); return; }
+  const name=prompt('Name of the new contractor:');
+  if(name===null) return;
+  if(!name.trim()){ alert('Please enter the contractor name.'); return; }
+  readCompanySettingsForm(); // keep anything typed on the page
+  if(!Array.isArray(db.contractors)) db.contractors=[];
+  const next=Math.max(0,...db.contractors.map(c=>+((String(c.code).match(/(\d+)$/)||[0,0])[1])))+1;
+  db.contractors.push({code:'C-'+next, name:name.trim(), address:'', phone:''});
+  saveDB(db);
+  render('softwareadmin');
+}
+// Deletes a contractor no employee was supplied by (employee history must keep its contractor).
+function deleteContractor(code){
+  if(!isSoftwareAdmin()){ alert('Only the Software Admin can delete contractors.'); return; }
+  const n=contractorEmployeeCount(code);
+  if(n){ alert(`${contractorName(code)} still has ${n} employee(s) (including inactive/resigned). Move them to another contractor first — Employees → Edit → Contractor.`); return; }
+  if(!confirm(`Delete contractor ${contractorName(code)}? It will no longer be offered anywhere.`)) return;
+  readCompanySettingsForm();
+  db.contractors=getContractors().filter(c=>c.code!==code);
   saveDB(db);
   render('softwareadmin');
 }
 function saveCompanySettings(){
   if(!isSoftwareAdmin()){ alert('Only the Software Admin can edit company details.'); return; }
-  db.companyName=document.getElementById('s_companyName').value;
-  db.companyAddress=document.getElementById('s_companyAddress').value;
-  db.companyGSTIN=document.getElementById('s_companyGSTIN').value;
-  db.companyPAN=document.getElementById('s_companyPAN').value;
-  db.companyCIN=document.getElementById('s_companyCIN').value;
-  db.companyPhone=document.getElementById('s_companyPhone').value;
-  db.companyEmail=document.getElementById('s_companyEmail').value;
-  ensureUnits();
-  db.units.forEach((u,i)=>{
-    const n=document.getElementById('s_unitName_'+i), a=document.getElementById('s_unitAddress_'+i);
-    if(n) u.name=n.value.trim(); // blank = no name yet (shown as just the unit number)
-    if(a) u.address=a.value;
-  });
-  syncLegacyUnitFields();
+  readCompanySettingsForm();
   saveDB(db);
-  alert('Saved.');
+  applyCompanyBranding();
+  alert('Saved — the company and unit details now show everywhere.');
 }
 async function changePassword(){
   const cur=document.getElementById('s_curPass').value;

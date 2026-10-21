@@ -58,7 +58,7 @@ async function rejectSession(message){
 // session restored on page reload. Loads the data, matches the ERP user profile and opens the app.
 async function startSession(authUser, isNewLogin){
   const meta=(authUser && authUser.app_metadata) || {};
-  if(!meta.role) return rejectSession('This account is not set up for '+APP_NAME+'. Contact your Software Admin.');
+  if(!meta.role) return rejectSession('This account is not set up for this payroll system. Contact your Software Admin.');
   try{
     await initDB();
   }catch(e){
@@ -110,7 +110,16 @@ function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').style.display='block';
   const badge=document.getElementById('currentUserBadge');
-  if(badge && currentUser) badge.textContent='👤 '+(currentUser.name||currentUser.username)+(currentUser.role?' ('+currentUser.role+')':'');
+  if(badge && currentUser){
+    // User chip: initials avatar, name and role (built with text nodes — names are user input).
+    const name=currentUser.name||currentUser.username;
+    badge.innerHTML='<span class="ucAvatar"></span><span class="ucText"><span class="ucName"></span><span class="ucRole"></span></span>';
+    badge.querySelector('.ucAvatar').textContent=initials(name);
+    badge.querySelector('.ucName').textContent=name;
+    badge.querySelector('.ucRole').textContent=currentUser.role||'';
+    badge.title=name+(currentUser.role?' ('+currentUser.role+')':'');
+  }
+  applyCompanyBranding();
   refreshNavVisibility();
   const firstAllowed=PERMISSION_MODULES.map(m=>m.key).find(k=>canOpenModule(k))||'dashboard';
   render(firstAllowed);
@@ -131,7 +140,14 @@ async function logout(){
     if(row && !row.logoutTime){
       row.logoutTime=new Date().toISOString();
       row.sessionDuration=fmtSessionDuration(row.loginTime, row.logoutTime);
-      await saveDB(db);
+      // Stamp only this row on the latest saved data — saving this tab's whole copy could undo
+      // entries made on another device since this tab loaded.
+      const stamp={...row};
+      await patchDB(latest=>{
+        if(!Array.isArray(latest.loginLogs)) latest.loginLogs=[];
+        const r=latest.loginLogs.find(x=>x.id===stamp.id);
+        if(r){ r.logoutTime=stamp.logoutTime; r.sessionDuration=stamp.sessionDuration; } else latest.loginLogs.push(stamp);
+      });
     }
   }
   try{ await sb.auth.signOut(); }catch(e){}
@@ -143,9 +159,7 @@ async function logout(){
   showLogin();
 }
 window.addEventListener('DOMContentLoaded',()=>{
-  const sideLogo=document.querySelector('.sidebarBrand img');
-  const loginLogo=document.getElementById('loginLogo');
-  if(sideLogo && loginLogo) loginLogo.src=sideLogo.src;
+  applyCompanyBranding(); // last-seen company name/logo on the login screen
 
   document.getElementById('loginPass').addEventListener('keydown',e=>{ if(e.key==='Enter') attemptLogin(); });
   document.getElementById('loginUser').addEventListener('keydown',e=>{ if(e.key==='Enter') attemptLogin(); });
@@ -158,8 +172,8 @@ window.addEventListener('DOMContentLoaded',()=>{
     let session=null;
     try{ ({ data:{ session } } = await sb.auth.getSession()); }catch(e){ session=null; }
     if(session && session.user){
-      // A Supabase session already exists in this browser tab (page reload) — reopen the app
-      // without asking for the password again.
+      // Sessions are not saved in the browser (01-supabase-db.js), so this only happens if the
+      // auth client already holds one in memory.
       const ok=await startSession(session.user, false);
       if(!ok) document.getElementById('loginScreen').style.display='flex';
       return;
@@ -172,18 +186,10 @@ function toggleTheme(){
   document.body.classList.toggle('dark');
   localStorage.setItem('hrms_dark', document.body.classList.contains('dark') ? '1' : '0');
 }
-function setColorTheme(name){
-  document.body.classList.forEach(c=>{ if(c.startsWith('theme-')) document.body.classList.remove(c); });
-  if(name && name!=='teal') document.body.classList.add('theme-'+name);
-  localStorage.setItem('hrms_theme', name);
-}
+// The highlight colour comes from the company logo (applyLogoAccent() in 03-company-logo-status.js);
+// the old per-browser colour themes (Teal, Ocean, …) are gone.
 (function applySavedTheme(){
   if(localStorage.getItem('hrms_dark')==='1') document.body.classList.add('dark');
-  const savedTheme=localStorage.getItem('hrms_theme')||'teal';
-  if(savedTheme!=='teal') document.body.classList.add('theme-'+savedTheme);
-  window.addEventListener('DOMContentLoaded',()=>{
-    const picker=document.getElementById('themePicker');
-    if(picker) picker.value=savedTheme;
-  });
+  try{ localStorage.removeItem('hrms_theme'); }catch(e){}
 })();
 

@@ -12,20 +12,23 @@ const SUPABASE_ANON_KEY = APP_CONFIG.supabaseAnonKey || '';
 if(!SUPABASE_URL || !SUPABASE_ANON_KEY){
   console.error('Supabase is not configured: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see .env.example).');
 }
-// The Supabase Auth session is kept in sessionStorage, so (as before) a login lasts for this
-// browser tab only and closing the tab signs the person out.
+// The Supabase Auth session is kept in memory only — never saved in the browser — so every time
+// the site is opened (new tab, reopened browser, restored tab or page refresh) the username and
+// password must be entered again.
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true }
+  auth: { persistSession: false, autoRefreshToken: true }
+});
+// Remove sessions saved by earlier versions, which let the site open without signing in.
+[window.sessionStorage, window.localStorage].forEach(store=>{
+  try{ Object.keys(store).filter(k=>/^sb-.*-auth-token/.test(k)).forEach(k=>store.removeItem(k)); }catch(e){}
 });
 
 /* ================= LOGIN ACCOUNTS (Supabase Auth) =================
    Usernames are mapped to Supabase Auth emails on this internal domain (no mail is ever sent).
    Passwords live only in Supabase Auth (hashed) — never in the erp_data JSON. Each account's
    role is stored in its Auth app_metadata, which only the server (api/users.js) can change.
-   USER_EMAIL_DOMAIN comes from VITE_LOGIN_EMAIL_DOMAIN and must match LOGIN_EMAIL_DOMAIN on the
-   server (api/users.js). */
-const USER_EMAIL_DOMAIN=APP_CONFIG.loginEmailDomain || 'users.example.com';
-const APP_NAME=APP_CONFIG.appName || 'Payroll';
+   Keep USER_EMAIL_DOMAIN identical to the one in api/users.js. */
+const USER_EMAIL_DOMAIN='users.vipl-payroll.app';
 function usernameToEmail(username){ return String(username||'').trim().toLowerCase()+'@'+USER_EMAIL_DOMAIN; }
 
 /* ================= DATA LAYER (Supabase) =================
@@ -48,31 +51,34 @@ function defaultDB(){
   return {
     // User profiles (name, role, active, module permissions). NO passwords — the matching login
     // accounts are in Supabase Auth and are created/changed from User Management (api/users.js).
-    users:[], // profiles are created when the first accounts sign in (see startSession)
-    departments:['Accounts','HR','Admin','Sales','Marketing','Production','Design','Stores','Purchase','Management'],
+    users:[
+      {username:'swadmin',name:'Software Administrator',role:'Software Admin'}
+    ],
+    departments:['Packing','Production','Quality Assurance','Housekeeping','Assembly','Dispatch','Stores'],
     employees:[],
     attendance:{}, // {date: {empCode: status}}
     payroll:{}, // {monthKey: {empCode: payrollRecord}}
     increments:[], // Annual Increment history — every record ever saved, across all employees
     nextEmpNum:1,
-    companyName:'',
-    companyAddress:'',
+    companyName:'VISALAM INDUSTRIES PVT LTD',
+    companyAddress:'No S-48, Sidco Industrial Estate, Kakkalur, Thiruvallur-602003, TAMIL NADU',
     companyGSTIN:'', companyPAN:'', companyCIN:'', companyPhone:'', companyEmail:'', companyLogo:'',
-    unit1Name:'', unit1Address:'', unit2Name:'', unit2Address:'',
+    unit1Name:'SUN GROUP', unit1Address:'', unit2Name:'', unit2Address:'',
     units:[ // Working units — see public/legacy/06b-units.js
-      {code:'Unit-1', name:'', address:''}, {code:'Unit-2', name:'', address:''},
-      {code:'Unit-3', name:'', address:''}, {code:'Unit-4', name:'', address:''},
+      {code:'Unit-1', name:'SUN GROUP', address:''}, {code:'Unit-2', name:'', address:''},
+      {code:'Unit-3', name:'JOY SHREE ENTERPRISES', address:''}, {code:'Unit-4', name:'S M S CONT', address:''},
       {code:'Unit-5', name:'', address:''}, {code:'Unit-6', name:'', address:''}
     ],
     autoBackup:{enabled:false, frequency:'daily', time:'20:00', weekday:1, dayOfMonth:1, lastRun:null, nextRun:null},
     backupHistory:[],
     holidays:[], // Holiday Calendar — array of {date:'YYYY-MM-DD', type:'NOPH'}, deducted from NOWD like Sundays
-    // ---- Employee Time Entry (standalone module) ----
-    // Completely separate store from `attendance` and `payroll` above. Never read by
-    // computeWorkingDays(), generatePayroll(), or any payroll/salary calculation.
+    // ---- Employee Time Entry ----
+    // Payroll reads these: a day not marked on the Attendance screen takes its status from here
+    // (getAttStatus), and the month's OT hours / Late minutes come from here (otHoursFor / lateMinutesFor).
     timeEntries:{}, // {date: {empCode: {inH,inM,inAP,outH,outM,outAP}}}
-    timeHolidays:[], // [{date:'YYYY-MM-DD', remarks:''}] — booking calendar for this module only
-    timeLeaves:[], // [{date:'YYYY-MM-DD', empCode, type, remarks}] — Employee Leave log for this module only
+    timeHolidays:[], // [{date:'YYYY-MM-DD', remarks:''}] — booked dates: time worked is full-day OT (not NOWD/NOPH)
+    timeLeaves:[], // [{date:'YYYY-MM-DD', empCode, type, remarks}] — Employee Leave (Loss of Pay / Half Day)
+    payrollSettings:{}, // {ym: {pfRate, pfEmployerRate, esiRate, esiEmployerRate, canteenTokenPrice, lateGraceMinutes}} — rates fixed when a month is generated
     loginLogs:[] // Login/Logout audit trail — {id, userId (username), name, loginTime (ISO string,
                  // recorded the moment sign-in succeeds), logoutTime (ISO string,
                  // recorded on Logout — '' while the session is still open), sessionDuration
@@ -94,6 +100,20 @@ async function loadDB(){
   const fresh = defaultDB();
   await saveDB(fresh);
   return fresh;
+}
+// Saves one small change on top of the LATEST copy in the database instead of this tab's copy, so a tab
+// left open for hours cannot overwrite Time Entry / Attendance saved meanwhile from another device.
+// Used for the logout stamp. Returns true/false.
+async function patchDB(mutate){
+  try{
+    const {data, error} = await sb.from('erp_data').select('data').eq('id', DB_KEY).maybeSingle();
+    if(error || !data || !data.data){ console.error('patchDB load error:', error); return false; }
+    const latest=data.data;
+    mutate(latest);
+    const res = await sb.from('erp_data').upsert({ id: DB_KEY, data: latest, updated_at: new Date().toISOString() });
+    if(res.error){ console.error('patchDB save error:', res.error); return false; }
+    return true;
+  }catch(e){ console.error('patchDB exception:', e); return false; }
 }
 async function saveDB(dbToSave){
   // IMPORTANT: this now returns true/false and NEVER swallows errors, so callers
@@ -134,8 +154,8 @@ async function initDB(){
   // saved in Supabase on every single page load/refresh/login. Keeping this code inside
   // the async function guarantees it only ever touches the genuinely loaded data.
   // ---------------------------------------------------------------------------------
-  if(db.companyName===undefined) db.companyName='';
-  if(db.companyAddress===undefined) db.companyAddress='';
+  if(!db.companyName){ db.companyName='VISALAM INDUSTRIES PVT LTD'; }
+  if(!db.companyAddress){ db.companyAddress='No S-48, Sidco Industrial Estate, Kakkalur, Thiruvallur-602003, TAMIL NADU'; }
   if(db.companyGSTIN===undefined) db.companyGSTIN='';
   if(!db.autoBackup) db.autoBackup={enabled:false, frequency:'daily', time:'20:00', weekday:1, dayOfMonth:1, lastRun:null, nextRun:null};
   if(!db.holidays) db.holidays=[];
@@ -154,14 +174,19 @@ async function initDB(){
   if(db.unit1Address===undefined) db.unit1Address='';
   if(db.unit2Name===undefined) db.unit2Name='';
   if(db.unit2Address===undefined) db.unit2Address='';
-  ensureUnits(); // db.units list — final unit names (see 06b-units.js)
+  // Designations list (Admin → Designations): created once from the designations already in use.
+  if(!Array.isArray(db.designations)) db.designations=[...new Set((db.employees||[]).map(e=>String(e.designation||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  ensureDepartments(); // company departments + auto-removal of long-unused ones (09-departments.js)
+  ensureContractors(); // db.contractors list — moves the old contractor-named units over (06c-contractors.js)
+  ensureUnits(); // db.units list (see 06b-units.js)
   if(!Array.isArray(db.increments)) db.increments=[];
   if(!db.timeEntries || typeof db.timeEntries!=='object') db.timeEntries={};
   if(!Array.isArray(db.timeHolidays)) db.timeHolidays=[];
   if(!Array.isArray(db.timeLeaves)) db.timeLeaves=[];
   if(!Array.isArray(db.users)) db.users=[];
   /* ---- PASSWORD CLEAN-UP ----
-     Older versions of this application stored passwords in plain text inside this JSON. Logins are now Supabase Auth
+     Passwords used to be stored in plain text inside this JSON (and the 'admin' / 'swadmin'
+     accounts were force-reset to fixed passwords on every load). Logins are now Supabase Auth
      accounts, so strip any stored passwords — including ones brought back by restoring an old
      backup — and never write them again. */
   delete db.admin;
