@@ -27,8 +27,10 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
    Usernames are mapped to Supabase Auth emails on this internal domain (no mail is ever sent).
    Passwords live only in Supabase Auth (hashed) — never in the erp_data JSON. Each account's
    role is stored in its Auth app_metadata, which only the server (api/users.js) can change.
-   Keep USER_EMAIL_DOMAIN identical to the one in api/users.js. */
-const USER_EMAIL_DOMAIN='users.vipl-payroll.app';
+   USER_EMAIL_DOMAIN comes from VITE_LOGIN_EMAIL_DOMAIN and must match LOGIN_EMAIL_DOMAIN on the
+   server (api/users.js). */
+const USER_EMAIL_DOMAIN=APP_CONFIG.loginEmailDomain || 'users.example.com';
+const APP_NAME=APP_CONFIG.appName || 'Payroll';
 function usernameToEmail(username){ return String(username||'').trim().toLowerCase()+'@'+USER_EMAIL_DOMAIN; }
 
 /* ================= DATA LAYER (Supabase) =================
@@ -51,22 +53,20 @@ function defaultDB(){
   return {
     // User profiles (name, role, active, module permissions). NO passwords — the matching login
     // accounts are in Supabase Auth and are created/changed from User Management (api/users.js).
-    users:[
-      {username:'swadmin',name:'Software Administrator',role:'Software Admin'}
-    ],
+    users:[], // profiles are created when the first accounts sign in (see startSession)
     departments:['Packing','Production','Quality Assurance','Housekeeping','Assembly','Dispatch','Stores'],
     employees:[],
     attendance:{}, // {date: {empCode: status}}
     payroll:{}, // {monthKey: {empCode: payrollRecord}}
     increments:[], // Annual Increment history — every record ever saved, across all employees
     nextEmpNum:1,
-    companyName:'VISALAM INDUSTRIES PVT LTD',
-    companyAddress:'No S-48, Sidco Industrial Estate, Kakkalur, Thiruvallur-602003, TAMIL NADU',
+    companyName:'',
+    companyAddress:'',
     companyGSTIN:'', companyPAN:'', companyCIN:'', companyPhone:'', companyEmail:'', companyLogo:'',
-    unit1Name:'SUN GROUP', unit1Address:'', unit2Name:'', unit2Address:'',
+    unit1Name:'', unit1Address:'', unit2Name:'', unit2Address:'',
     units:[ // Working units — see public/legacy/06b-units.js
-      {code:'Unit-1', name:'SUN GROUP', address:''}, {code:'Unit-2', name:'', address:''},
-      {code:'Unit-3', name:'JOY SHREE ENTERPRISES', address:''}, {code:'Unit-4', name:'S M S CONT', address:''},
+      {code:'Unit-1', name:'', address:''}, {code:'Unit-2', name:'', address:''},
+      {code:'Unit-3', name:'', address:''}, {code:'Unit-4', name:'', address:''},
       {code:'Unit-5', name:'', address:''}, {code:'Unit-6', name:'', address:''}
     ],
     autoBackup:{enabled:false, frequency:'daily', time:'20:00', weekday:1, dayOfMonth:1, lastRun:null, nextRun:null},
@@ -154,8 +154,8 @@ async function initDB(){
   // saved in Supabase on every single page load/refresh/login. Keeping this code inside
   // the async function guarantees it only ever touches the genuinely loaded data.
   // ---------------------------------------------------------------------------------
-  if(!db.companyName){ db.companyName='VISALAM INDUSTRIES PVT LTD'; }
-  if(!db.companyAddress){ db.companyAddress='No S-48, Sidco Industrial Estate, Kakkalur, Thiruvallur-602003, TAMIL NADU'; }
+  if(db.companyName===undefined) db.companyName='';
+  if(db.companyAddress===undefined) db.companyAddress='';
   if(db.companyGSTIN===undefined) db.companyGSTIN='';
   if(!db.autoBackup) db.autoBackup={enabled:false, frequency:'daily', time:'20:00', weekday:1, dayOfMonth:1, lastRun:null, nextRun:null};
   if(!db.holidays) db.holidays=[];
@@ -185,8 +185,7 @@ async function initDB(){
   if(!Array.isArray(db.timeLeaves)) db.timeLeaves=[];
   if(!Array.isArray(db.users)) db.users=[];
   /* ---- PASSWORD CLEAN-UP ----
-     Passwords used to be stored in plain text inside this JSON (and the 'admin' / 'swadmin'
-     accounts were force-reset to fixed passwords on every load). Logins are now Supabase Auth
+     Older versions of this application stored passwords in plain text inside this JSON. Logins are now Supabase Auth
      accounts, so strip any stored passwords — including ones brought back by restoring an old
      backup — and never write them again. */
   delete db.admin;

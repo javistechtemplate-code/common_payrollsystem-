@@ -3,13 +3,17 @@ import { flushSync } from 'react-dom';
 import App from './App.jsx';
 import './icons/legacyIcons.js'; // defines window.ico() for the legacy scripts
 import './features/export/excelExport.js'; // defines window.downloadExcel() for the legacy screens and reports
+import { APP_NAME, LOGIN_EMAIL_DOMAIN } from './config/brand.js';
 import './styles/index.css';
 
 // Deployment configuration for the legacy modules (public/legacy/01-supabase-db.js reads it).
 window.__APP_CONFIG__ = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL || '',
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+  appName: APP_NAME,
+  loginEmailDomain: LOGIN_EMAIL_DOMAIN,
 };
+document.title = APP_NAME;
 
 // Render synchronously: the legacy scripts in index.html are `defer`red and run right after this
 // module, and they look up the shell elements (nav items, #overlay, login inputs) immediately.

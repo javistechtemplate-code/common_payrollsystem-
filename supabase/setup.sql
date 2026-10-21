@@ -1,4 +1,5 @@
--- VIPL Payroll — database setup / security rules.
+-- Payroll — database setup / security rules (current single-row storage).
+-- NOTE: Phase 3 of the template replaces this with relational tables and per-role RLS.
 -- Run in Supabase -> SQL Editor. Safe to run more than once.
 --
 -- The whole ERP database is one JSON row in erp_data. These rules let ONLY signed-in staff
@@ -34,15 +35,18 @@ create policy "staff can update" on erp_data
   with check ((auth.jwt() -> 'app_metadata' ->> 'role') is not null);
 
 -- ---------------------------------------------------------------------------------------------
--- FIRST SOFTWARE ADMIN (one time):
+-- FIRST ADMINISTRATOR (one time, per client project):
 --   1. Authentication -> Users -> Add user -> Create new user
---        Email:    swadmin@users.vipl-payroll.app
---        Password: (choose a strong one)
+--        Email:    <username>@<LOGIN_EMAIL_DOMAIN>   (the domain set in VITE_LOGIN_EMAIL_DOMAIN)
+--        Password: (a strong password chosen by the client — never commit it)
 --        [x] Auto Confirm User
---   2. Then run the statement below to give that account the Software Admin role.
---      Everyone else is then created from the app's User Management screen.
+--   2. Give that account its role (replace the two placeholders):
+--
+--   update auth.users
+--   set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb)
+--                           || '{"role": "Software Admin", "username": "<username>"}'::jsonb
+--   where email = '<username>@<LOGIN_EMAIL_DOMAIN>';
+--
+--   Everyone else is then created from the app's User Management screen.
+--   (Phase 5 replaces this with a secure first-Manager setup.)
 -- ---------------------------------------------------------------------------------------------
-update auth.users
-set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb)
-                        || '{"role": "Software Admin", "username": "swadmin"}'::jsonb
-where email = 'swadmin@users.vipl-payroll.app';

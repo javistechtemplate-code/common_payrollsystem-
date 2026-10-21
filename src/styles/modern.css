@@ -113,11 +113,11 @@ tr:hover td{background:var(--hover);}
 
 /* ---------- Dialogs ---------- */
 .overlay{background:rgba(15,23,42,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);}
-.overlay.show .modal{animation:viplModalIn .18s cubic-bezier(.2,.8,.2,1);}
+.overlay.show .modal{animation:payrollModalIn .18s cubic-bezier(.2,.8,.2,1);}
 .modal{border-radius:20px;border:1px solid var(--line);box-shadow:var(--shadow-lg);padding:26px 28px;}
 .modal h3{font-size:19px;font-weight:750;letter-spacing:-.02em;}
 .modalActions{gap:10px;}
-@keyframes viplModalIn{from{opacity:0;transform:translateY(8px) scale(.985);}to{opacity:1;transform:none;}}
+@keyframes payrollModalIn{from{opacity:0;transform:translateY(8px) scale(.985);}to{opacity:1;transform:none;}}
 @media (prefers-reduced-motion:reduce){ .overlay.show .modal{animation:none;} .stat:hover,.reportCard:hover{transform:none;} }
 
 /* "+ Add Employee" choice cards */
