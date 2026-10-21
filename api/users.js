@@ -11,8 +11,8 @@
 // User Management screen shows.
 import { createClient } from '@supabase/supabase-js';
 
-// Keep identical to USER_EMAIL_DOMAIN in public/legacy/01-supabase-db.js.
-const USER_EMAIL_DOMAIN = 'users.vipl-payroll.app';
+// Must match VITE_LOGIN_EMAIL_DOMAIN used by the browser (src/config/brand.js).
+const USER_EMAIL_DOMAIN = process.env.LOGIN_EMAIL_DOMAIN || 'users.example.com';
 const ROLES = ['Admin', 'Software Admin', 'HR', 'Accounts', 'Viewer'];
 const PRIVILEGED = ['Admin', 'Software Admin'];
 const USERNAME_PATTERN = /^[a-z0-9._-]{2,40}$/;

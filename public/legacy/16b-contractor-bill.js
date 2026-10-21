@@ -1,8 +1,8 @@
 /* ================= CONTRACTORS BILL =================
    Two views for a month, one or all contractors:
-   - Contractor Service Charge: MF pays each contractor a fixed amount for every FULL Present day of
+   - Contractor Service Charge: the company pays each contractor a fixed amount for every FULL Present day of
      every employee that contractor supplied. Half Days, holidays (NOPH) and absent days don't count.
-   - Company Payable: what MF pays the contractor for the month = the Net Pay of the employees it
+   - Company Payable: what the company pays the contractor for the month = the Net Pay of the employees it
      supplied + that service charge.
    The rate (₹30 per present day to start) is kept per month in db.contractorRates[ym]. A month
    without its own rate uses the latest earlier month's rate. Only Admin / Software Admin can

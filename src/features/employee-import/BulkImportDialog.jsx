@@ -13,7 +13,7 @@ const blank = (v) => v === undefined || v === null || String(v).trim() === '';
 // "Bulk Import" dialog for NEW employees only: download the Excel template (same columns as the
 // Add Employee form), upload a filled copy, review every row, then add the ready rows.
 // Existing employees are never changed from here — only through the Edit form.
-// Opened through the 'vipl:open-bulk-import' event (openBulkImport() in 08-employees.js).
+// Opened through the 'payroll:open-bulk-import' event (openBulkImport() in 08-employees.js).
 export default function BulkImportDialog() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState('start'); // 'start' | 'review' | 'done'
@@ -31,8 +31,8 @@ export default function BulkImportDialog() {
       setResults([]); setShowErrorsOnly(false); setImported(null);
       setOpen(true);
     };
-    window.addEventListener('vipl:open-bulk-import', onOpen);
-    return () => window.removeEventListener('vipl:open-bulk-import', onOpen);
+    window.addEventListener('payroll:open-bulk-import', onOpen);
+    return () => window.removeEventListener('payroll:open-bulk-import', onOpen);
   }, []);
 
   useEffect(() => {

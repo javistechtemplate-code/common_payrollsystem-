@@ -5,7 +5,7 @@
 //     fileName: 'Payroll-Register-Oct-2026.xlsx',
 //     sheets: [{
 //       name: 'Payroll',                       // sheet tab (max 31 chars)
-//       title: 'MF GROUP — Payroll Register',  // optional heading rows above the table
+//       title: 'ACME GROUP — Payroll Register',  // optional heading rows above the table
 //       subtitle: 'Oct-2026 · Unit-1',
 //       columns: [{ header: 'Code', key: 'code', width: 10, type: 'text' | 'number' | 'money' }],
 //       rows: [{ code: 'EMP001', ... }],

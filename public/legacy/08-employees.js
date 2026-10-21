@@ -121,11 +121,11 @@ function nextEmpCode(){
 /* ---- Bulk Import (Excel) — Software Admin only ----
    Opened from Software Admin → Bulk Import Employees. The dialog is a React component
    (src/features/employee-import/BulkImportDialog.jsx); it is opened with the
-   'vipl:open-bulk-import' event and uses the two functions below. */
+   'payroll:open-bulk-import' event and uses the two functions below. */
 function openBulkImport(){
   if(!isSoftwareAdmin()){ alert('Only the Software Admin can bulk import employees.'); return; }
   closeModal();
-  window.dispatchEvent(new CustomEvent('vipl:open-bulk-import'));
+  window.dispatchEvent(new CustomEvent('payroll:open-bulk-import'));
 }
 // What the Bulk Import dialog needs to build the template and check uploaded rows.
 function employeeImportContext(){

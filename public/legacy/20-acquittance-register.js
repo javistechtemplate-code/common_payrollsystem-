@@ -7,7 +7,7 @@
    15-per-page rule holds exactly on screen, in print and in Save-as-PDF. */
 let acqUnit = 'All';
 // Contractor-wise register filters: contractor ('All', a code, or '-' = no contractor) and,
-// optionally, one unit ('All' or a unit code) — e.g. "SUN GROUP employees in Unit-2".
+// optionally, one unit ('All' or a unit code) — e.g. "Contractor C-1 employees in Unit-2".
 let acqContractor = 'All';
 let acqContractorUnit = 'All';
 const ACQ_ROWS_PER_PAGE = 15;
